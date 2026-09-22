@@ -1,0 +1,1048 @@
+ WCH-LinkUserManual                                                                     https://wch-ic.com
+
+
+                                WCH-LinkUserManual
+                                             Version: V2.8
+                                         https://wch-ic.com
+
+ 1 WCH-Link
+ 1.1 Module Introduction
+ WCH-Link module can be used for online debugging and downloading of WCH RISC-V MCU, and also for
+ online debugging and downloading of ARM MCU with SWD/JTAG interface. It also comes with a serial
+ port for easy debugging output. There are currently 3 WCH-Links including WCH-LinkE, WCH-DAPLink,
+ and WCH-LinkW, and WCH-LinkE is recommended.
+                                   Figure 1 WCH-Link physical diagram
+
+
+
+
+                                     Figure 2 WCH-Link mode
+
+
+
+
+                                      Table 1 WCH-Link mode
+Mode          Status LED               IDE                               Support chip
+          Blue LED is always                            WCH RISC-V core chips that support single/dual
+RISC-V                           MounRiver Studio
+          off when idle                                 line debugging
+
+
+ V2.8                                             1
+WCH-LinkUserManual                                                                        https://wch-ic.com
+
+         Blue LED is always
+ARM                            Keil/MounRiver Studio     ARM core chips that support SWD/JTAG protocol
+         on when idle
+
+
+1.2 Mode Switching
+Way 1: Use MounRiver Studio software to switch Link mode. (This method is applicable to WCH-Link,
+WCH-LinkE and WCH-LinkW)
+
+①   Click arrow        in the shortcut toolbar to bring up the project download configuration window
+② Click Query on the right side of Target Mode to view the current Link mode
+③ Click Target Mode option box, select the target Link mode, click Apply
+
+
+
+
+Way 2: Use WCH-LinkUtility tool to switch Link mode.
+① Click Get on the right side of Active WCH-Link mode to view the current Link mode
+② Click Active WCH-Link mode option box, select the target Link mode, click Set
+
+
+
+
+Way 3: Use ModeS key to switch Link mode. (This method is applicable to WCH-LinkE-R0-1v2,
+WCH-DAPLink-R0-2v0 and WCH-LinkW-R0-1v1 and above)
+① Press and hold the ModeS key to power up the Link
+
+
+Notes:
+(1) The blue LED flashes when downloading and debugging.
+(2) The Link maintains the switched mode for subsequent use.
+(3) WCH-Link simulation debugger module URL: https://www.wch-ic.com/products/WCH-Link.html
+(4) MounRiver Studio Access URL: http://mounriver.com/
+(5) WCH-LinkUtility Access URL: https://www.wch.cn/downloads/WCH-LinkUtility_ZIP.html
+(6) WCHISPTool Access URL: https://www.wch.cn/downloads/WCHISPTool_Setup_exe.html
+(7) WCH-Link, WCH-LinkE and WCH-LinkW support LinkRV and LinkDAP-WINUSB mode switching;
+    WCH-DAPLink supports LinkDAP-WINUSB and LinKDAP-HID mode switching.
+
+
+
+
+1.3 Serial Port Baud Rate
+                            Table 2 WCH-Link serial port supports baud rate
+       1200                 2400                  4800                 9600                 14400
+       19200                38400                57600                115200               230400
+
+
+V2.8                                               2
+WCH-LinkUserManual                                                                             https://wch-ic.com
+
+
+                    Table 3 WCH-LinkE/DAPLink/LinkW serial port supports baud rate
+       1200              2400               4800              9600              14400              19200
+       38400            57600             115200             230400             460800            921600
+
+Notes:
+(1) Figure 1 in the row of pins RX and TX for the serial port transceiver pins, serial port support baud rate is
+shown in the table above.
+(2) CDC driver needs to be installed under Win7.
+(3) If you re-unplug Link, please re-open the serial debugging assistant.
+
+
+
+
+V2.8                                                   3
+WCH-LinkUserManual                                                                   https://wch-ic.com
+
+
+
+
+1.4 Function Comparison
+                                                    Table 4 Link functions and performance comparison table
+                      Function items               WCH-Link-R1-1v1         WCH-LinkE-R0-1v3           WCH-DAPLink-R0-2v0          WCH-LinkW-R0-1v1
+                      RISC-V mode                           √                        √                           ×                         √
+              ARM-SWD mode-HID device                       ×                        ×                           √                         ×
+            ARM-SWD mode-WINUSB device                      √                        √                           √                         √
+              ARM-JTAG mode -HID device                     ×                        ×                           √                         ×
+           ARM-JTAG mode -WINUSB device                     ×                        √                           √                         √
+                ModeS key to switch mode                    ×                        √                           √                         √
+           2-wire way upgrade firmware offline              ×                        √                           ×                         ×
+            Serial port upgrade firmware offline            √                        ×                           ×                         ×
+              USB upgrade firmware offline                  √                        ×                           √                         √
+            Controllable 3.3V/5V power output               ×                        √                           √                         √
+           High-speed USB2.0 to JTAG interface              ×                        √                           ×                         ×
+                      Wireless mode                         ×                        ×                           ×                         √
+                                                    MounRiver Studio         MounRiver Studio                                      MounRiver Studio
+                                                                                                          WCH-LinkUtility
+                      Download tools                WCH-LinkUtility          WCH-LinkUtility                                       WCH-LinkUtility
+                                                                                                           Keil uVision5
+                                                     Keil uVision5            Keil uVision5                                         Keil uVision5
+                                                                                                      Supported in all versions
+                  Keil supported versions          Keil V5.25 and above    Keil V5.25 and above                                   Keil V5.25 and above
+                                                                                                              of Keil
+
+
+
+
+V2.8                                                                          4
+WCH-LinkUserManual                                                                   https://wch-ic.com
+
+
+
+
+2 Pin Connections
+                                                               Table 5 Link supported chip model
+                                          Common chip models                                        WCH-Link   WCH-LinkE   WCH-DAPLink   WCH-LinkW
+   CH643/CH32X035_X033/CH32L103/CH32V003/CH32V002_004_005_006_007/CH32V317/
+                                                                                                          ×        √            ×            √
+   CH32M007
+   CH32V10x/CH32V20x/CH32V30x                                                                             √        √            ×            √
+   CH569/CH573/CH583                                                                                      √        √            ×            ×
+   CH59x/CH641/CH645/CH564/CH584_585_581/CH32M030/CH570_CH572/CH32H417_415_416/
+                                                                                                          ×        √            ×            ×
+   CH32V205_V203CC/CH595_596/CH32V407_467/CH32X305_315/CH587_586
+   CH32F10x/CH32F20x/CH579/friendly chips that support SWD interface                                      √        √            √            √
+   friendly chips that support JTAG interface                                                             ×        √            √            √
+
+
+
+
+V2.8                                                                          5
+WCH-LinkUserManual                                                                         https://wch-ic.com
+
+
+                                   Table 6 Common chip pin connections
+                           Common chip models                               SWDIO            SWCLK
+CH569                                                                        PA11              PA10
+CH579                                                                        PB16              PB17
+CH573/CH583/CH59x/CH584_585_581/CH587_586                                    PB14              PB15
+CH643/CH32X035_X033                                                          PC18              PC19
+CH32V003                                                                      PD1                -
+CH641                                                                         PB0                -
+CH645/CH570_CH572                                                             PA0              PA1
+CH32V10x/CH32V20x/CH32V30x/CH32F10x/CH32F20x/CH32L103/                       PA13              PA14
+CH32V317/CH32V205_203CC/CH32V407_467/CH32X305_315
+CH564                                                                        PB10              PB11
+CH32V002_004_005_006_007/CH32M007                                             PD1              PB3
+CH32M030                                                                      PA3              PA2
+CH32H417_415_416                                                              PB9              PB8
+CH595_596                                                                    PA12              PA13
+Note:
+(1) Among them, CH564, CH32M030, CH584_585_581, CH570_572, CH32V205_203CC,
+    CH595_596,CH32V407_467,CH32X305_315,CH587_586,CH32V002_004_005_006_007                       and
+    CH32H417_415_416 support both 1-wire (SWDIO) and 2-wire (SWDIO-SWCLK) debug interfaces.
+(2) WCH-Link-R1-1v1 has been discontinued and is still officially maintained, but no new features are
+    added.
+
+                                Table 7 STM32F10xxx JTAG interface pinout
+         JTAG interface pin name                     JTAG debug interface                   Pinout
+                   TMS                               JTAG mode selection                    PA13
+                   TCK                                    JTAG clock                        PA14
+                     TDI                                JTAG data input                     PA15
+                   TDO                                  JTAG data output                     PB3
+
+Notes:
+(1) Link maximum supported line length: 30cm, if the download process is unstable, try to turn down the
+    download speed.
+(2) JTAG mode, WCH-LinkE-R0-1v3, WCH-DAPLink-R0-2v0 hardware version began to support, the
+    previous hardware version does not support.
+(3) WCH-LinkE high-speed version is only for CH32F20x/CH32V20x/CH32V30x to speed up.
+(4) CH569、CH579、CH573、CH583、CH59x、CH584_585_581, if you want to use Link for downloading
+    or debugging, you need to use the official ISP tool to open the 2-wire debug interface, and you need to
+    pay attention to Link mode when using it. The steps are as follows:
+     Open WCHISPStudio tool, the chip to be tested enters BOOT mode
+         -CH569 needs to short HD0 and GND to power on through U-port;
+         -CH573/CH583/CH59x/ CH584_585_581 need to press and hold the Download button to power on
+         through the U-port;
+     WCHISPStudio tool will automatically pop up the adaptation window, click to open the two-wire
+         debug interface
+
+V2.8                                                6
+WCH-LinkUserManual                                                                            https://wch-ic.com
+
+
+
+
+3 Keil Download and Debug
+3.1 Device Switching
+WCH-DAPLink supports two modes, ARM mode-WINUSB device and ARM mode-HID device, and you
+can switch between the two device modes with the WCH-LinkUtility tool (or by powering up the Link after
+long pressing the ModeS key.) WCH-Link, WCH-LinkE and WCH-LinkW only support ARM
+mode-WINUSB device mode.
+
+
+
+
+                                        Table 8 WCH-DAPLink device
+              Device                       Support Link                    Keil supported versions
+                                          WCH-Link
+                                          WCH-LinkE                       Keil V5.25 and above
+ ARM mode-WINUSB device
+                                         WCH-DAPLink                   ARM-CMSIS V5.3.0 and above
+                                          WCH-LinkW
+       ARM mode-HID device               WCH-DAPLink                   Supported in all versions of Keil
+Note:
+(1) WCH-Link, WCH-LinkE, WCH-DAPLink and WCH-LinkW are factory defaulted to WINUSB device
+    mode.
+(2) WCH-DAPLink-R0-1v0 switches between two device modes by long pressing the IAP key to power up.
+(3) WCH-LinkUtility tool on will occupy the Link device and cause Keil software can not recognize the Link.
+
+
+3.2 Download Configuration
+
+①      Click the magic wand        in the toolbar to bring up the Options for Target dialog box, click Debug
+
+       and select the emulator model
+
+
+
+
+②      Click the Use option box and select CMSIS-DAP Debugger
+③      Click the Settings button to bring up the Cortex-M Target Driver Setup dialog box
+
+
+
+
+V2.8                                                   7
+WCH-LinkUserManual                                                                          https://wch-ic.com
+
+
+
+
+Serial No: Display the identifier of the debug adapter being used. When multiple adapters are connected, you
+can specify the adapter by using the drop-down list.
+SW Device: Show the device ID and name of the connected device.
+Port: Set the internal debug interface SW or JTAG. (Both interfaces are supported by WCH-LinkE-R0-1v3,
+WCH-DAPLink-R0-2v0 and WCH-LinkW-R0-1v1)
+Max Clock: Set the clock rate to communicate with the target device.
+
+④      Click Flash Download for download configuration
+
+
+
+
+Download Function: Configuration options
+RAM for Algorithm: Configure the starting address and size of RAM space
+Our CH32F103 series chip RAM space size is 0x1000, CH32F20x series chip RAM space size is 0x2800.
+Programming Algorithm: Add algorithm file
+The algorithm file has been added automatically after installing the chip device package, click OK.
+
+⑤      After completing the above configuration, click OK to close the dialog box. Click the icon in the
+       toolbar to burn in the code.
+
+
+3.3 Debug
+
+①      Click the Debug button    in the toolbar to enter the debug page
+②      Set breakpoints
+
+
+
+
+V2.8                                                 8
+WCH-LinkUserManual                                                                               https://wch-ic.com
+
+
+
+
+③      Basic debug commands
+
+        Reset: Perform a reset operation on the program.
+
+       Run: Cause the current program to start running at full speed until the program stops when it
+encounters a breakpoint.
+
+       Step: Execute a single statement and if a function is encountered, it will go inside the function.
+
+        Step Over: Execute a single statement that does not go inside the function if it encounters a function,
+but runs the function at full speed and jumps to the next statement.
+
+       Step Out: Run all the contents after the current function at full-speed until the function returns to the
+previous level.
+
+④      Click the Debug button       in the toolbar again to exit debug.
+
+
+
+
+V2.8                                                     9
+WCH-LinkUserManual                                                                             https://wch-ic.com
+
+
+
+
+4 MounRiver Studio Download and Debug
+4.1 Download Configuration
+
+①      Click the arrow         in the toolbar to bring up the project download configuration window
+②      Click the Disable Read-Protect button to disable the chip read protection
+
+
+
+
+③      Target configuration, the main elements are as follows.
+
+
+
+
+④      Configuration Options
+
+
+
+
+⑤      Click Apply and Close to save the download configuration. Click on the icon        in the toolbar to burn
+       the code, and the result will be displayed in the Console.
+
+
+4.2 Debug
+①      Enter the debugging page
+
+Way 1: Click the Debug button          in the toolbar to enter the debug page directly.
+
+Way 2: Click the arrow               in the toolbar and select Debug Configurations to pop up the debug
+configuration page. Double-click GDB OpenOCD MRS Debugging to generate the obj file, select the obj
+file and click the Debug button at the bottom right corner to enter the debugging page.
+
+
+
+
+V2.8                                                    10
+WCH-LinkUserManual                                                                                 https://wch-ic.com
+
+
+
+
+②      Set breakpoints
+
+
+
+
+③      Basic debug commands
+
+       Reset: Perform a reset operation on the program.
+
+       Run: Make the current program start running at full speed until the program stops when it meets a
+breakpoint.
+
+       Terminate: Exit debugging.
+
+       Step Into: Execute a single statement, and if a function is encountered, it will go inside the function.
+
+       Step Over: Execute a single statement, and if it encounters a function, it will not go inside the function,
+but run the function at full speed and skip to the next statement.
+
+       Step Return: Run all contents after the current function at full speed until the function returns to the
+previous level.
+
+
+V2.8                                                      11
+WCH-LinkUserManual                                                                           https://wch-ic.com
+
+
+④      Click     button, exit the debug.
+
+
+4.3 Other Functions
+4.3.1 Set Chip Read-Protect
+
+         Query chip read-protect status
+
+         Enable chip read-protect status
+
+         Disable chip read-protect status
+
+
+4.3.2 Code Flash Full Erase
+MounRiver Studio can erase all the user areas of the chip by controlling the hardware reset pin or by
+re-powering the chip. To control erase by re-powering, Link is required to power the chip; to control erase by
+hardware reset pin, the reset pins of the chip and Link need to be connected. (Supported by WCH-LinkE,
+WCH-DAPLink and WCH-LinkW only)
+
+
+
+
+4.3.3 Disable 2-wire SDI
+For partial chips, code and data protection can be enabled by disabling the 2-wire SDI.
+
+         Disable the 2-wire SDI
+
+
+4.3.4 Chip Memory Allocation
+For high-capacity general-purpose (connected/interconnected/wireless) chips, memory allocation is available
+through MounRiver Studio; please refer to the User Selection Word section of the CH32FV2x_V3xRM
+manual for details.
+
+
+
+
+V2.8                                                 12
+WCH-LinkUserManual                                                 https://wch-ic.com
+
+
+
+
+5 WCH-LinkUtility Download
+5.1 Download Configuration
+
+①      Click the icon      , connect to Link
+②      Select the chip model
+
+
+
+③      Configuration options
+
+
+
+④      Release chip read protection and set two-line debug speed
+
+
+
+
+⑤      Click icon        to add firmware
+
+⑥      Click icon        to execute download
+
+
+5.2 Other Functions
+5.2.1 Query Chip Information
+
+Click icon          to query chip information
+
+
+
+
+5.2.2 Set Chip Read-Protect
+
+         Query chip read-protect status
+
+         Enable chip read-protect status
+
+         Disable chip read-protect status
+
+
+5.2.3 Read Chip Flash
+
+Click icon          to read chip Flash
+
+
+
+
+V2.8                                                  13
+WCH-LinkUserManual                                                                           https://wch-ic.com
+
+
+
+
+5.2.4 Code Flash Full Erase
+The WCH-LinkUtility tool can erase all user areas of the chip by controlling the hardware reset pin or by
+re-powering the chip. To control erase by re-powering, Link is required to power the chip; to control erase by
+hardware reset pin, the reset pins of the chip and Link are required to be connected. (Supported by
+WCH-LinkE, WCH-DAPLink and WCH-LinkW only)
+
+
+
+
+5.2.5 Power Output Controllable
+WCH-LinkUtility tool can control Link power output. Click on Target and choose to turn on/off the power
+supply 3.3V/5V output in the drop-down list. (Supported by WCH-LinkE, WCH-DAPLink and
+WCH-LinkW only)
+
+
+
+
+5.2.6 Automatic Continuous Download
+Tick Auto download when WCH-Link was linked to enable automatic continuous download of the project.
+
+
+
+
+V2.8                                                 14
+WCH-LinkUserManual                                                                           https://wch-ic.com
+
+
+5.2.7 Multi-Device Download
+The WCH-LinkUtility tool can recognize multiple Link devices. When multiple Links are connected, the
+Connected WCH-Link List option box allows you to select a specific Link device for downloading.
+
+
+
+
+5.2.8 Turn off the 2-wire Debug Interface
+For partial chips, code and data protection can be enabled by closing the two-wire debug interface.
+
+
+
+
+5.2.9 User Select Word Configuration
+For CH32 series chips, user selectable word configuration can be done through the WCH-LinkUtility tool.
+For details, please refer to the user selectable word section in the RM manual.
+
+
+
+
+5.2.10 BOOT Download
+For CH32V003, CH641, CH32V002_004_005_006_007, CH32M007, CH32X035_X033 chip, you can
+select program download to program flash memory storage or system storage by WCH-LinkUtility tool.
+
+
+
+
+5.2.11 SDI Virtual Serial Port Function
+This function uses the SDI interface to realize the chip printout function, which needs to modify the printing
+function. Refer to the SDI_Printf routine in the relevant EVT. This function is only supported in V1.80 and
+above. You need to check EnableSDIPrintf and open the COM port of WCH-LinkE.
+
+
+
+
+V2.8                                                 15
+WCH-LinkUserManual                                                        https://wch-ic.com
+
+
+
+
+Note:
+(1) This feature is only supported in V1.80 and above.
+(2) This feature is only supported by WCH-LinkE.
+(3) The supporting chip includes CH32V003, CH32V103, CH32V20x, CH32V30x, CH32X035_X033,
+CH32L103,        CH641,      CH32V002_004_005_006_007, CH32M007, CH32M030,   CH32V317,
+CH32V205_203CC, CH32V407_467, CH32X305_315.
+
+
+
+
+V2.8                                      16
+WCH-LinkUserManual                                                                           https://wch-ic.com
+
+
+
+6 Firmware Update Methods
+6.1 MounRiver Studio Online Update
+If the firmware needs to be updated, MounRiver Studio will have a pop-up window to remind you when you
+click the download button, click Yes to start the update.
+
+
+
+
+6.2 WCH-LinkUtility Online Update
+If the firmware needs to be updated, WCH-LinkUtility will have a pop-up window to remind you when you
+click the download button, click Yes to start the update.
+
+
+
+
+Notes:
+(1) WCH-LinkE supports manual online update, the steps are as follows.
+ Power up the Link after long press the IAP button until the blue LED blinks.
+ MounRiver Studio/WCH-LinkUtility will have a pop-up window to remind you when you click the
+      download button, click Yes to start the update.
+(2) If the Link firmware update is abnormal, please update the firmware by offline update.
+
+
+6.3 WCH-LinkUtility Offline Update (2-wire Approach to Offline Update)
+①      Connect WCH-LinkE with WCH-LinkE to be updated
+                                     WCH-LinkE          Link to be updated
+                                         3V3                   3V3
+                                         GND                  GND
+                                       SWDIO                 SWDIO
+                                       SWCLK                 SWCLK
+②      WCH-LinkE power on, select the Link chip model to be updated (WCH-LinkE main control chip is
+       CH32V30x)
+③      To be updated Link into IAP mode (long press the IAP button to power up the Link, that is, through the
+       USB port connected to the computer to power up)
+④      Click Target->Clear All Code Flash-By Power off to erase all the user area of the chip
+
+
+
+
+V2.8                                                  17
+WCH-LinkUserManual                                                                          https://wch-ic.com
+
+
+
+
+⑤      Click icon        , diaable chip read-protect
+
+
+
+
+⑥      Click icon       , add Link offline updated firmware
+⑦      Configuration options (Program + Verify + Reset and Run)
+
+
+
+
+⑧      Click icon        to execute download
+
+
+Notes:
+(1) The Link to be updated is limited to WCH-LinkE.
+(2) Two WCH-LinkE are required for this method.
+(3) When Link enters IAP mode, the blue LED flashes.
+
+
+6.4 WCHISPStudio Serial Port Offline Update
+①      Connect WCH-Link with USB to TTL module
+                                     WCH-Link          USB to TTL module
+                                         TX                       RX
+                                         RX                       TX
+                                        GND                   GND
+②      USB to TTL module power on, WCH-Link into BOOT mode (short connection J1 in Figure 1 will Link
+       power on)
+③      Select chip model: CH549, download interface: serial port, device list: select the serial port number
+       corresponding to the USB to TTL module
+
+
+
+
+④      Add Link offline updated firmware to target program file
+⑤      Download configuration
+
+
+
+
+V2.8                                                   18
+WCH-LinkUserManual                                                                   https://wch-ic.com
+
+
+
+
+⑥   Click the download button
+⑦ Click on the download and wait for the device to access the field, then plug the WCH-Link into the
+    USB port, the ISP tool automatically began to download
+Note: Serial port offline update is only supported by WCH-Link.
+
+
+6.5 WCHISPStudio USB Offline Update
+① To update the Link into BOOT mode (short connect J1 in Figure 1 or long press BOOT key and then
+  power up the Link)
+② WCHISPStudio tool will automatically pop up the adaptation window
+③ Add Link offline upgrade firmware to the target program file
+④ Download configuration
+
+
+
+
+⑤   Click the download button
+
+Notes:
+(1) USB offline update is only supported by WCH-Link, WCH-DAPLink and WCH-LinkW.
+(2) WCH-LinkE-R0-1v3 and WCH-DAPLink-R0-2v0 are only available for firmware version v2.8 and above.
+(3) WCH-LinkUtility tool can be exported through MounRiver Studio software.
+
+
+V2.8                                             19
+WCH-LinkUserManual                                                                        https://wch-ic.com
+
+
+
+
+(4) Link offline upgrade firmware is located in the MounRiver Studio installation path and WCH-LinkUtility
+installation path.
+
+
+
+
+①   WCH-DAPLink upgrade firmware
+②   WCH-LinkW upgrade firmware
+③   WCH-LinkE upgrade firmware
+④   WCH-Link RISC-V mode upgrade firmware
+⑤   WCH-Link ARM mode upgrade firmware
+⑥   WCH-DAPLink offline upgrade firmware
+⑦   WCH-Link ARM mode offline upgrade firmware
+⑧   WCH-Link RISC-V mode offline upgrade firmware
+⑨   WCH-LinkE offline upgrade firmware
+⑩   WCH-LinkW offline upgrade firmware
+
+
+
+
+V2.8                                               20
+WCH-LinkUserManual                                                                     https://wch-ic.com
+
+
+
+7 WCH-LinkE High-speed JTAG
+7.1 Module Overview
+The WCH-LinkE-R0-1v3 provides a JTAG interface that supports 4-wire connections (TMS, TCK, TDI and
+TDO wires) for extending the JTAG interface for computers to operate CPUs, DSPs, FPGAs, CPLDs and
+other devices.
+                             Figure 3 WCH-LinkE high-speed JTAG mode
+
+
+
+
+7.2 Module Features
+      As Host/Master host mode.
+      JTAG interface provides TMS wire, TCK wire, TDI wire and TDO wire.
+      Support high-speed USB data transfer.
+      Flexible operation of CPU, DSP, FPGA and CPLD devices through computer API cooperation.
+
+
+7.3 Module Switching
+The WCH-LinkE-R0-1v3 can be upgraded to high-speed JTAG mode via the WCHLinkEJtagUpdTool tool,
+download the steps as follows.
+① WCH-LinkE-R0-1v3 into IAP mode (long press the IAP button to power up the Link, i.e., connect to
+    the computer through the USB port to power up), at this time the blue LED flashes.
+② Open WCHLinkEJtagUpdTool tool, execute the download (WCH-LinkE high-speed JTAG upgrade
+    firmware has been automatically added).
+③ Firmware update is complete, at this time the blue LED is always on.
+
+
+
+
+Notes.
+(1) WCHLinkEJtagUpdTool get URL: https://www.wch.cn/downloads/WCHLinkEJtagUpdTool_ZIP.html
+(2) The firmware can be updated offline by WCH-LinkUtility tool, please refer to manual 6.3
+    WCH-LinkUtility Offline Update for details.
+(3) WCH-LinkE high-speed JTAG offline update firmware is located in the WCHLinkEJtagUpdTool
+    installation path.
+
+
+
+V2.8                                               21
+WCH-LinkUserManual                                                                          https://wch-ic.com
+
+
+
+
+①      WCH-LinkE high-speed JTAG upgrade firmware
+②      WCH-LinkE high-speed JTAG offline upgrade firmware
+
+
+7.4 Download Process
+①      In WCH-LinkE high-speed JTAG mode, the Bit program file is first downloaded to the FPGA via JTAG,
+       and the Bit file will operate the SPI controller of the FPGA to convert the JTAG data to SPI data for
+       writing to Flash, and this step is to write the BIN file to realize its program curing process.
+②      Here the FPGA is Xilinx xc7a35t. Write the CFG file and use "openocd -f" to call it. Name the CFG file
+       as usb20jtag.cfg and save it to the location of the openocd.exe file.
+
+# Specify WCH-LinkE high-speed JTAG debugger
+adapter driver ch347
+ch347 vid_pid 0x1a86 0x55dd
+
+# Set TCK clock frequency
+adapter speed 10000
+
+# Specify TARGET, loading the JTAG-SPI driver in OpenOCD
+source [find cpld/xilinx-xc7.cfg]
+source [find cpld/jtagspi.cfg]
+
+# Set IR command of TARGET
+set XC7_JSHUTDOWN 0x0d
+set XC7_JPROGRAM 0x0b
+set XC7_JSTART 0x0c
+set XC7_BYPASS 0x3f
+
+# Download process
+Init
+# First download the Bit file to TARGET
+pld load 0 bscan_spi_xc7a35t.bit
+reset halt
+# Detect Flash information
+flash probe 0
+# Download Bin file to Flash
+flash write_image erase test.bin 0x0 bin
+
+# Effective firmware operation
+irscan xc7.tap $XC7_JSHUTDOWN
+irscan xc7.tap $XC7_JPROGRAM
+runtest 60000
+
+
+V2.8                                                  22
+WCH-LinkUserManual                                                                         https://wch-ic.com
+runtest 2000
+irscan xc7.tap $XC7_BYPASS
+runtest 2000
+
+exit
+
+③      Run the command: openocd.exe -f usb20jtag.cfg in Windows terminal and execute it as follows.
+
+
+
+
+④      The download is over and the device is running normally.
+
+Notes.
+(1) conversion role of the Bit file, with the help of Github open                         source      project:
+     https://github.com/quartiq/bscan_spi_bitstreams
+(2) openocd.exe file location: MounRiver\MounRiver_Studio\toolchain\OpenOCD\bin
+
+
+
+
+V2.8                                                  23
+WCH-LinkUserManual                                                                          https://wch-ic.com
+
+
+
+8 WCH-LinkW Use Instruction
+8.1 Module Overview
+WCH-LinkW is a wired/wireless 2.4G dual imitation real debugger, which can be used for online debugging
+and downloading of WCH RISC-V architecture MCU and also for online debugging and downloading of
+ARM chips with SWD/JTAG interface.
+
+
+8.2 Use Methods
+8.2.1 Wired Mode
+Wired mode only needs 1 WCH-LinkW, connect the row of pins to MCU and USB port to PC for
+downloading and debugging.
+
+                                                     SWCLK/TCK                   SWCLK
+                                                     SWDIO/TMS                   SWDIO
+        PC           USB                 USB
+                                                              GND                GND
+                                               Emulator                                    Target Board
+                                                              3V3                3V3
+
+
+8.2.2 Wireless Mode
+Wireless mode requires 2 WCH-LinkW, divided into WCH-LinkW master (connected to computer) and
+WCH-LinkW slave (connected to MCU.) After WCH-LinkW is successfully enumerated to computer, it will
+detect whether there is a slave match within 2 seconds to switch mode, if there is a slave match, it will
+switch to wireless mode, and the green light will be on; otherwise, it will switch to wired mode, and the
+green light goes off.
+Wireless mode download debugging requires the use of two WCH-LinkW, the use of the following steps:
+① The slave and MCU are connected by two wires, and the power is supplied through the U-port of MCU,
+or the slave and MCU can be powered by charging head or mobile power connected to the USB port of the
+slave
+② After the slave is successfully powered up, the host USB port is connected to the computer. After the host
+device is successfully enumerated and matched to the slave within 2 seconds, the green light of the host and
+the slave will be lit
+③ After the successful matching of wireless mode host and slave, the host and slave are powered off, then
+repeat the above steps, if only one is powered off, it can be re-powered for automatic matching without
+repeating the above process
+④ Download and debug MCU
+
+
+
+
+V2.8                                                24
+WCH-LinkUserManual                                                                        https://wch-ic.com
+
+
+                                     SWCLK/TCK             SWCLK
+                                     SWDIO/TMS             SWDIO
+                             Slave
+                                           GND             GND
+                            Emulator                               Target Board
+                                           3V3             3V3
+
+
+
+
+                              Host         USB             USB          PC
+                            Emulator
+
+
+Note: Using Code Flash full erase and power output controllable function requires connecting to the slave
+USB port via charging head or mobile power to power the slave and MCU.
+
+
+8.3 Wireless Mode Access Address Match
+When WCH-LinkW uses wireless mode for downloading and debugging, it is necessary to ensure that the
+wireless mode access addresses of the host and slave are the same. You can set the wireless mode access
+address through the WCH-LinkUtility tool. The steps are as follows:
+
+
+
+
+① Connect WCH-LinkW wireless mode host and slave to computer respectively, click GET button, check
+whether the current host and slave access addresses are the same, if they are the same and not 0xE339E339,
+execute step 4, otherwise execute step 2
+② Click CREATE button to create a random address
+③ Click SET button to set the access address of host and slave respectively
+④ The slave connects to the MCU to power on first, then the host connects to the computer, and the green
+light will light up to use the wireless mode normally
+
+Notes:
+(1) The factory default WCH-LinkW wireless mode access address is 0xE339E339.
+(2) When wireless mode, only one pair of WCH-LinkW wireless access address should be guaranteed to be
+the same in the same usage environment. If there are more than one pair of devices, you need to use the
+above steps to set different wireless mode access addresses.
+
+
+
+
+V2.8                                               25
+WCH-LinkUserManual                                                                 https://wch-ic.com
+
+
+
+9 Typical Problem Statement
+                     Error Alert                                     Solution
+         Use Keil software to download         1. Please refer to manual 3.2 Download configuration
+                                                     to complete Keil download configuration.
+
+
+
+
+         Use Keil software to download         1. The RAM space size of our CH32F20x series
+                                                  chips is 0x2800.
+
+
+
+
+       Use MounRiver Studio software to        1. Check whether the chip's two-wire debug interface
+                 download                      is correctly connected to Link.
+                                               2. Check whether the Debug function of the chip is
+                                               turned on (if not, it can be turned on through the ISP
+                                               tool).
+                                               3. Check whether the user program inside the chip is
+                                               open to sleep function and whether there is an
+                                               operation of FLASHrelated functions (if open, you
+                                               can enter BOOT mode and download through two
+                                               lines).
+                                               4. Check whether the two-wire debug interface of the
+                                               user program inside the chip is multiplexed as a
+                                               common GPIO port (if multiplexed, you can enter
+                                               BOOT mode and download through two wires).
+                                               Note:
+                                               (1) For CH32 series chips, if the download is not
+                                               successful, you can enter BOOT mode (BOOT0 to
+                                               VCC, BOOT1 to GND) and download through Link.
+                                               (2) For 3 and 4, the problem can be solved by
+
+
+V2.8                                      26
+ WCH-LinkUserManual                                                                            https://wch-ic.com
+
+                                                          WCH-LinkUtility tool to erase all the user area of the
+                                                          chip (refer to Chapter 5of the manual for
+                                                          WCH-LinkUtility download).
+        Use the WCH-LinkUtility tool to download                        Erase all user areas of the
+
+
+
+
+                                                             chip
+Update firmware using WCHLinkEJtagUpdTool tool            1. Analysis of the cause, may be the
+After updating the firmware according to manual 7.3       WCH-LinkE-R0-1v3 on the Y1 crystal soldering
+Mode Switching Download Procedure, the blue LED           abnormalities, resulting in the crystal cannot properly
+on the WCH-LinkE-R0-1v3 does not light up and the         start vibration. Therefore, you need to re-solder the
+Device Manager cannot recognize the device.               Y1 crystal.
+When using WCH-LinkW wireless mode for                    1. Please refer to section 8.2.2 of the manual for
+downloading and debugging, the green light does not       operation.
+turn on.
+When using WCH-LinkW wireless mode for                    1. To use the above function, you need to connect to
+downloading and debugging, Code Flash full erase and      the slave USB port through the charging head or
+power output controllable functions are not available.    mobile power to power the slave and MCU.
+When using WCH-LinkW wireless mode for                    1.WCH-LinkW slave online firmware upgrade needs
+downloading and debugging, the slave cannot upgrade       to be done in wired mode.
+the firmware online.
+ Notes:
+ (1) The debugging function is not supported when the user program turns on the sleep function.
+ (2) If you exit abnormally when using the debug function, it is recommended to re-plug the Link.
+ (3) When using the download and debug functions of CH32F103/CH32F203/CH32V103/CH32V203/
+ CH32V307/CH32L103/CH32V317/CH32V205_203CC/CH32V407_467, BOOT0 is grounded.
+ (4) When using the debug function of CH569, the user code must be smaller than the configured ROM space,
+ as shown in Table 2-2 of CH569SD1.
+ (5) When using the debug function of CH32 series chip, please make sure the chip is in the read protection
+ off state.
+ (6) Typical WCH-Link FAQs can be found at: https://www.wch.cn/bbs/thread-100647-1.html
+
+
+
+
+ V2.8                                                27
+WCH-LinkUserManual                                                                             https://wch-ic.com
+
+
+
+
+10 Driver Installation
+10.1 WCH-Link Driver
+(1) The WCH-Link driver will be installed automatically when MounRiver Studio is installed, and the device
+manager will be shown in the table below after successful installation. If the driver installation fails, please
+open the LinkDrv folder under the installation path of MounRiver Studio and manually install SETUP.EXE
+under the WCHLink folder.
+(2) To install the WCH-LinkUtility tool, you need to manually install the WCH-Link driver. Please open the
+Drv_Link folder in the WCH-LinkUtility tool file directory and manually install
+WCHLinkDrv_WHQL_S.exe.
+                   Device manager                                             Drive path
+
+
+
+
+10.2 WCH-LinkE High-speed JTAG Driver
+WCH-LinkE-R0-1v3 is upgraded to high-speed JTAG mode, you need to manually install the WCH-LinkE
+high-speed JTAG driver to use it properly. Please open the Drv folder under the installation path of
+WCHLinkEJtagUpdTool and install CH341PAR.EXE manually.
+                   Device manager                                             Drive path
+
+
+
+
+10.3 CDC Driver
+CDC device installation problems under WIN7.
+① If the serial port driver is successfully installed, the following steps are not required.
+② Confirm that the usbser.sys file is present in path B. If it is missing, copy it from path A to path B.
+③ Reinstall the CDC driver. (See the above table for the driver path, please install the CDC driver in the
+   corresponding mode)
+
+
+
+V2.8                                                  28
+WCH-LinkUserManual                                                                  https://wch-ic.com
+
+
+
+
+Note: If the above steps do not solve the problem, please refer to the link below
+
+
+
+
+Reference: http://www.wch.cn/downloads/InstallNoteOn64BitWIN7_ZH_PDF.html
+
+
+
+
+V2.8                                                  29
+

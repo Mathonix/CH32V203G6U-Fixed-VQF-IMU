@@ -1,0 +1,27 @@
+# MounRiver Studio / embedded build outputs
+obj/
+*.elf
+*.hex
+*.map
+*.bin
+*.hex
+*.lst
+*.d
+
+# Runtime/debug traces and generated probes
+*.log
+*.out.log
+*.err.log
+*.gdb
+
+# Archives and generated delivery packages
+*.zip
+
+# IDE user-local metadata
+.settings/
+
+# OS/editor files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
