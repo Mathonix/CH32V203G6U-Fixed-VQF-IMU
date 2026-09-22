@@ -49,7 +49,7 @@ typedef struct {
     uint16_t flags;
 } fixed_vqf_t;
 
-/* LSM6DSV +/-125 dps scale: raw sample -> rad/s Q7.24. */
+/* LSM6DSV +/-2000 dps scale: raw sample -> rad/s Q7.24. */
 q24_t fixed_vqf_gyro_raw_to_q24(int16_t raw);
 
 void fixed_vqf_init(fixed_vqf_t *s);
@@ -59,4 +59,3 @@ void fixed_vqf_get_q30(const fixed_vqf_t *s, q30_t out[4]);
 void fixed_vqf_get_bias_q24(const fixed_vqf_t *s, q24_t out[3]);
 void fixed_vqf_get_bias_q16(const fixed_vqf_t *s, int32_t out[3]);
 bool fixed_vqf_get_rest_detected(const fixed_vqf_t *s);
-

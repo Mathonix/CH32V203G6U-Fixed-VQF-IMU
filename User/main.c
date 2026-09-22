@@ -1,4 +1,4 @@
-/********************************** (C) COPYRIGHT *******************************
+﻿/********************************** (C) COPYRIGHT *******************************
  * File Name          : main.c
  * Description        : LSM6DSV SPI diagnostic + PA9 status LED.
  *******************************************************************************/
@@ -20,19 +20,21 @@
 #define LSM_CTRL3_REG           0x12U
 #define LSM_CTRL6_REG           0x15U
 #define LSM_CTRL7_REG           0x16U
+#define LSM_CTRL8_REG           0x17U
 #define LSM_HAODR_CFG_REG       0x62U
 #if FIXED_VQF_SAMPLE_HZ == 2000U
-#define LSM_CTRL1_CONFIG        0x1AU /* HAODR high-performance accel, 2 kHz, +/-2 g */
-#define LSM_CTRL2_CONFIG        0x1AU /* HAODR high-performance gyro, 2 kHz, +/-125 dps */
+#define LSM_CTRL1_CONFIG        0x1AU /* HAODR high-performance accel, 2 kHz, +/-4 g */
+#define LSM_CTRL2_CONFIG        0x1AU /* HAODR high-performance gyro, 2 kHz, +/-2000 dps */
 #elif FIXED_VQF_SAMPLE_HZ == 1000U
-#define LSM_CTRL1_CONFIG        0x19U /* HAODR high-performance accel, 960 Hz, +/-2 g */
-#define LSM_CTRL2_CONFIG        0x19U /* HAODR high-performance gyro, 960 Hz, +/-125 dps */
+#define LSM_CTRL1_CONFIG        0x19U /* HAODR high-performance accel, 960 Hz, +/-4 g */
+#define LSM_CTRL2_CONFIG        0x19U /* HAODR high-performance gyro, 960 Hz, +/-2000 dps */
 #else
 #error "FIXED_VQF_SAMPLE_HZ must be 1000 or 2000"
 #endif
 #define LSM_HAODR_CFG_CONFIG    0x01U /* HAODR_SEL=1: accel and gyro HAODR */
-#define LSM_CTRL6_CONFIG         0x40U /* Gyro LPF1: about 101 Hz at HAODR 2 kHz */
+#define LSM_CTRL6_CONFIG         0x44U /* Gyro +/-2000 dps; LPF1 about 101 Hz at HAODR 2 kHz */
 #define LSM_CTRL7_CONFIG         0x01U /* LPF1_G_EN=1 */
+#define LSM_CTRL8_CONFIG         0x01U /* Accelerometer +/-4 g */
 #define LSM_CTRL3_CONFIG        0x44U /* BDU=1, IF_INC=1 for coherent burst reads */
 #define LSM_STATUS_REG          0x1EU
 #define LSM_OUT_TEMP_L_REG      0x20U
@@ -66,6 +68,7 @@ volatile uint8_t lsm_ctrl2 = 0;
 volatile uint8_t lsm_ctrl3 = 0;
 volatile uint8_t lsm_ctrl6 = 0;
 volatile uint8_t lsm_ctrl7 = 0;
+volatile uint8_t lsm_ctrl8 = 0;
 volatile uint8_t lsm_haodr_cfg = 0;
 volatile uint8_t lsm_status = 0;
 volatile uint32_t lsm_data_ready_count = 0U;
@@ -476,10 +479,10 @@ static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
     gyro_q24[0] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_x);
     gyro_q24[1] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_y);
     gyro_q24[2] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_z);
-    /* +/-2 g, raw/16384 g -> Q1.30 is exactly raw << 16. */
-    accel_q30[0] = (q30_t)((int32_t)lsm_accel_x * 65536L);
-    accel_q30[1] = (q30_t)((int32_t)lsm_accel_y * 65536L);
-    accel_q30[2] = (q30_t)((int32_t)lsm_accel_z * 65536L);
+    /* +/-4 g, raw/8192 g -> Q1.30 is exactly raw << 17. */
+    accel_q30[0] = (q30_t)((int32_t)lsm_accel_x * 131072L);
+    accel_q30[1] = (q30_t)((int32_t)lsm_accel_y * 131072L);
+    accel_q30[2] = (q30_t)((int32_t)lsm_accel_z * 131072L);
 
     VQF_GyroSoftwareLPF(gyro_q24, gyro_q24);
     vqf_gyro_filtered_q24[0] = gyro_q24[0];
@@ -557,14 +560,14 @@ static void CAN1_SendDamiaoFrame(uint16_t id, uint8_t reg, int16_t x, int16_t y,
 
 static int16_t LSM_GyroToCentiDps(int16_t raw)
 {
-    /* +/-125 dps, 4.375 mdps/LSB => 0.4375 centi-dps/LSB. */
-    return (int16_t)(((int32_t)raw * 7) / 16);
+    /* +/-2000 dps, 70 mdps/LSB => 7 centi-dps/LSB. */
+    return (int16_t)((int32_t)raw * 7);
 }
 
 static int16_t LSM_AccelToMg(int16_t raw)
 {
-    /* +/-2 g, 16384 LSB/g => 0.061035 mg/LSB. */
-    return (int16_t)(((int32_t)raw * 125) / 2048);
+    /* +/-4 g, 8192 LSB/g => 0.122070 mg/LSB. */
+    return (int16_t)(((int32_t)raw * 125) / 1024);
 }
 
 static void CAN1_Service(uint16_t elapsed_ms)
@@ -805,17 +808,20 @@ SLOW_CODE static void LSM6DSV_Test(void)
     LSM6DSV_WriteReg(LSM_CTRL1_REG, LSM_CTRL1_CONFIG);
     LSM6DSV_WriteReg(LSM_CTRL6_REG, LSM_CTRL6_CONFIG);
     LSM6DSV_WriteReg(LSM_CTRL7_REG, LSM_CTRL7_CONFIG);
+    LSM6DSV_WriteReg(LSM_CTRL8_REG, LSM_CTRL8_CONFIG);
     Delay_Ms(40);
     lsm_ctrl1 = LSM6DSV_ReadReg(LSM_CTRL1_REG);
     lsm_ctrl2 = LSM6DSV_ReadReg(LSM_CTRL2_REG);
     lsm_ctrl3 = LSM6DSV_ReadReg(LSM_CTRL3_REG);
     lsm_ctrl6 = LSM6DSV_ReadReg(LSM_CTRL6_REG);
     lsm_ctrl7 = LSM6DSV_ReadReg(LSM_CTRL7_REG);
+    lsm_ctrl8 = LSM6DSV_ReadReg(LSM_CTRL8_REG);
     lsm_haodr_cfg = LSM6DSV_ReadReg(LSM_HAODR_CFG_REG);
     if((lsm_ctrl1 != LSM_CTRL1_CONFIG) || (lsm_ctrl2 != LSM_CTRL2_CONFIG) ||
        ((lsm_ctrl3 & LSM_CTRL3_CONFIG) != LSM_CTRL3_CONFIG) ||
        (lsm_ctrl6 != LSM_CTRL6_CONFIG) ||
        ((lsm_ctrl7 & 0x01U) != LSM_CTRL7_CONFIG) ||
+       ((lsm_ctrl8 & 0x03U) != LSM_CTRL8_CONFIG) ||
        ((lsm_haodr_cfg & 0x03U) != LSM_HAODR_CFG_CONFIG))
     {
         lsm_test_result = 0xE2U; /* Register write/readback failure. */
@@ -933,15 +939,6 @@ int main(void)
         }
     }
 }
-
-
-
-
-
-
-
-
-
 
 
 

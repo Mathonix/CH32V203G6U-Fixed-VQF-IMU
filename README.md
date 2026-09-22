@@ -1,4 +1,4 @@
-﻿# CH32V203G6U Fixed-VQF IMU
+# CH32V203G6U Fixed-VQF IMU
 
 基于 **WCH CH32V203G6U6** 的六轴 IMU 姿态解算工程。项目使用 LSM6DSV 作为陀螺仪和加速度计，运行定点 Full-VQF（6D，无磁力计）融合，并通过 CAN 和 UART 输出角速度、加速度及欧拉角数据。
 
@@ -68,8 +68,8 @@ UART 转换器必须连接到 **PA2**，不能将 WCH-Link 调试串口或其他
 
 LSM6DSV 默认配置为：
 
-- 加速度计：HAODR 2 kHz，量程 ±2 g
-- 陀螺仪：HAODR 2 kHz，量程 ±125 dps
+- 加速度计：HAODR 2 kHz，量程 ±4 g（8192 LSB/g）
+- 陀螺仪：HAODR 2 kHz，量程 ±2000 dps
 - BDU 和地址自动递增开启
 - 陀螺仪 LPF1 约 101 Hz
 - 软件端另有定点二阶低通滤波
