@@ -1,4 +1,4 @@
-﻿/********************************** (C) COPYRIGHT *******************************
+/********************************** (C) COPYRIGHT *******************************
  * File Name          : main.c
  * Description        : LSM6DSV SPI diagnostic + PA9 status LED.
  *******************************************************************************/
@@ -23,18 +23,26 @@
 #define LSM_CTRL8_REG           0x17U
 #define LSM_HAODR_CFG_REG       0x62U
 #if FIXED_VQF_SAMPLE_HZ == 2000U
-#define LSM_CTRL1_CONFIG        0x1AU /* HAODR high-performance accel, 2 kHz, +/-4 g */
-#define LSM_CTRL2_CONFIG        0x1AU /* HAODR high-performance gyro, 2 kHz, +/-2000 dps */
+#define LSM_CTRL1_CONFIG        0x1AU /* HAODR high-performance accel, 2 kHz */
+#define LSM_CTRL2_CONFIG        0x1AU /* HAODR high-performance gyro, 2 kHz */
 #elif FIXED_VQF_SAMPLE_HZ == 1000U
-#define LSM_CTRL1_CONFIG        0x19U /* HAODR high-performance accel, 960 Hz, +/-4 g */
-#define LSM_CTRL2_CONFIG        0x19U /* HAODR high-performance gyro, 960 Hz, +/-2000 dps */
+#define LSM_CTRL1_CONFIG        0x19U /* HAODR high-performance accel, 960 Hz */
+#define LSM_CTRL2_CONFIG        0x19U /* HAODR high-performance gyro, 960 Hz */
 #else
 #error "FIXED_VQF_SAMPLE_HZ must be 1000 or 2000"
 #endif
 #define LSM_HAODR_CFG_CONFIG    0x01U /* HAODR_SEL=1: accel and gyro HAODR */
-#define LSM_CTRL6_CONFIG         0x44U /* Gyro +/-2000 dps; LPF1 about 101 Hz at HAODR 2 kHz */
+#if LSM6DSV_GYRO_FS_2000DPS
+#define LSM_CTRL6_CONFIG         0x44U /* Gyro +/-2000 dps; LPF1 about 101 Hz */
+#else
+#define LSM_CTRL6_CONFIG         0x40U /* Gyro +/-125 dps; LPF1 about 101 Hz */
+#endif
 #define LSM_CTRL7_CONFIG         0x01U /* LPF1_G_EN=1 */
+#if LSM6DSV_ACCEL_FS_4G
 #define LSM_CTRL8_CONFIG         0x01U /* Accelerometer +/-4 g */
+#else
+#define LSM_CTRL8_CONFIG         0x00U /* Accelerometer +/-2 g */
+#endif
 #define LSM_CTRL3_CONFIG        0x44U /* BDU=1, IF_INC=1 for coherent burst reads */
 #define LSM_STATUS_REG          0x1EU
 #define LSM_OUT_TEMP_L_REG      0x20U
@@ -479,10 +487,17 @@ static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
     gyro_q24[0] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_x);
     gyro_q24[1] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_y);
     gyro_q24[2] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_z);
-    /* +/-4 g, raw/8192 g -> Q1.30 is exactly raw << 17. */
+#if LSM6DSV_ACCEL_FS_4G
+    /* +/-4 g, raw/8192 g -> Q1.30. */
     accel_q30[0] = (q30_t)((int32_t)lsm_accel_x * 131072L);
     accel_q30[1] = (q30_t)((int32_t)lsm_accel_y * 131072L);
     accel_q30[2] = (q30_t)((int32_t)lsm_accel_z * 131072L);
+#else
+    /* +/-2 g, raw/16384 g -> Q1.30. */
+    accel_q30[0] = (q30_t)((int32_t)lsm_accel_x * 65536L);
+    accel_q30[1] = (q30_t)((int32_t)lsm_accel_y * 65536L);
+    accel_q30[2] = (q30_t)((int32_t)lsm_accel_z * 65536L);
+#endif
 
     VQF_GyroSoftwareLPF(gyro_q24, gyro_q24);
     vqf_gyro_filtered_q24[0] = gyro_q24[0];
@@ -560,14 +575,24 @@ static void CAN1_SendDamiaoFrame(uint16_t id, uint8_t reg, int16_t x, int16_t y,
 
 static int16_t LSM_GyroToCentiDps(int16_t raw)
 {
+#if LSM6DSV_GYRO_FS_2000DPS
     /* +/-2000 dps, 70 mdps/LSB => 7 centi-dps/LSB. */
     return (int16_t)((int32_t)raw * 7);
+#else
+    /* +/-125 dps, 4.375 mdps/LSB => 0.4375 centi-dps/LSB. */
+    return (int16_t)(((int32_t)raw * 7) / 16);
+#endif
 }
 
 static int16_t LSM_AccelToMg(int16_t raw)
 {
+#if LSM6DSV_ACCEL_FS_4G
     /* +/-4 g, 8192 LSB/g => 0.122070 mg/LSB. */
     return (int16_t)(((int32_t)raw * 125) / 1024);
+#else
+    /* +/-2 g, 16384 LSB/g => 0.061035 mg/LSB. */
+    return (int16_t)(((int32_t)raw * 125) / 2048);
+#endif
 }
 
 static void CAN1_Service(uint16_t elapsed_ms)

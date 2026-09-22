@@ -1,10 +1,14 @@
-#pragma once
+﻿#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
 
 /* Fixed VQF and sensor sampling frequency. Supported: 1000 or 2000 Hz. */
 #define FIXED_VQF_SAMPLE_HZ     2000U
+
+/* Sensor full-scale options; defaults preserve the original ranges. */
+#define LSM6DSV_GYRO_FS_2000DPS 0U /* 0: +/-125 dps, 1: +/-2000 dps */
+#define LSM6DSV_ACCEL_FS_4G     0U /* 0: +/-2 g,    1: +/-4 g */
 
 /* Keep the fixed-point estimator on the same bias-estimation configuration
  * as the current float VQF instance: rest bias enabled, motion bias disabled. */
@@ -49,7 +53,7 @@ typedef struct {
     uint16_t flags;
 } fixed_vqf_t;
 
-/* LSM6DSV +/-2000 dps scale: raw sample -> rad/s Q7.24. */
+/* LSM6DSV selected gyro scale: raw sample -> rad/s Q7.24. */
 q24_t fixed_vqf_gyro_raw_to_q24(int16_t raw);
 
 void fixed_vqf_init(fixed_vqf_t *s);
@@ -59,3 +63,4 @@ void fixed_vqf_get_q30(const fixed_vqf_t *s, q30_t out[4]);
 void fixed_vqf_get_bias_q24(const fixed_vqf_t *s, q24_t out[3]);
 void fixed_vqf_get_bias_q16(const fixed_vqf_t *s, int32_t out[3]);
 bool fixed_vqf_get_rest_detected(const fixed_vqf_t *s);
+

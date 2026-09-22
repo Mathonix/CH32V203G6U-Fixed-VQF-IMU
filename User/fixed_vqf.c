@@ -406,8 +406,13 @@ static FAST_CODE void bias_kalman_update(fixed_vqf_t *s, const q30_t H[9],
 
 q24_t fixed_vqf_gyro_raw_to_q24(int16_t raw)
 {
-    /* 0.070 dps/LSB (+/-2000 dps). Constant is rad/s in Q40; result is rounded Q24. */
+#if LSM6DSV_GYRO_FS_2000DPS
+    /* 0.070 dps/LSB (+/-2000 dps), rad/s in Q40. */
     return sat32(round_shift_s64((int64_t)raw * 1343306864LL, 16U));
+#else
+    /* 0.004375 dps/LSB (+/-125 dps), rad/s in Q40. */
+    return sat32(round_shift_s64((int64_t)raw * 83956679LL, 16U));
+#endif
 }
 
 SLOW_CODE void fixed_vqf_init(fixed_vqf_t *s)

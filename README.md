@@ -48,6 +48,15 @@ UART 转换器必须连接到 **PA2**，不能将 WCH-Link 调试串口或其他
 
 配置位于 `User/fixed_vqf.h`：
 
+可通过以下宏独立选择量程，默认均为 `0U`，保持原来的参数：
+
+```c
+#define LSM6DSV_GYRO_FS_2000DPS 0U
+#define LSM6DSV_ACCEL_FS_4G     0U
+```
+
+将对应宏改为 `1U` 后重新编译即可启用 ±2000 dps 或 ±4 g。
+
 ```c
 #define FIXED_VQF_SAMPLE_HZ     2000U
 #define FIXED_VQF_MOTION_BIAS_ENABLED 1U
@@ -68,8 +77,8 @@ UART 转换器必须连接到 **PA2**，不能将 WCH-Link 调试串口或其他
 
 LSM6DSV 默认配置为：
 
-- 加速度计：HAODR 2 kHz，量程 ±4 g（8192 LSB/g）
-- 陀螺仪：HAODR 2 kHz，量程 ±2000 dps
+- 加速度计：HAODR 2 kHz，默认量程 ±2 g（可选 ±4 g）
+- 陀螺仪：HAODR 2 kHz，默认量程 ±125 dps（可选 ±2000 dps）
 - BDU 和地址自动递增开启
 - 陀螺仪 LPF1 约 101 Hz
 - 软件端另有定点二阶低通滤波
