@@ -64,9 +64,8 @@ SECTIONS
 		. = ALIGN(4);
 	} >FLASH_FAST AT>FLASH_FAST 
 
-	/* One-time initialization and other cold paths execute from the
-	 * non-zero-wait Flash bank, preserving the complete 32 KB fast bank
-	 * for the 1 kHz sensor/VQF/CAN/UART path. */
+	/* Cold paths remain in FLASH_FAST on this 32 KB D6 configuration.
+	 * Section names alone do not relocate them to a different Flash bank. */
 	.slowtext :
 	{
 		. = ALIGN(4);

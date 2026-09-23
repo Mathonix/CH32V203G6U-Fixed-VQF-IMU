@@ -4,14 +4,19 @@
 #include <stdint.h>
 
 /* Fixed VQF and sensor sampling frequency. Supported: 1000 or 2000 Hz. */
+#ifndef FIXED_VQF_SAMPLE_HZ
 #define FIXED_VQF_SAMPLE_HZ     2000U
+#endif
 
 /* Sensor full-scale options; defaults preserve the original ranges. */
+#ifndef LSM6DSV_GYRO_FS_2000DPS
 #define LSM6DSV_GYRO_FS_2000DPS 0U /* 0: +/-125 dps, 1: +/-2000 dps */
+#endif
+#ifndef LSM6DSV_ACCEL_FS_4G
 #define LSM6DSV_ACCEL_FS_4G     0U /* 0: +/-2 g,    1: +/-4 g */
+#endif
 
-/* Keep the fixed-point estimator on the same bias-estimation configuration
- * as the current float VQF instance: rest bias enabled, motion bias disabled. */
+/* Both motion and rest gyro-bias estimators are enabled. */
 #define FIXED_VQF_MOTION_BIAS_ENABLED 1U
 #define FIXED_VQF_REST_BIAS_ENABLED   1U
 #define FIXED_VQF_BIAS_SIGMA_REST_DPS 0.03f

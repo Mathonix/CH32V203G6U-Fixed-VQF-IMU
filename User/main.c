@@ -1,15 +1,18 @@
 /********************************** (C) COPYRIGHT *******************************
  * File Name          : main.c
- * Description        : LSM6DSV SPI diagnostic + PA9 status LED.
+ * Description        : LSM6DSV acquisition, fixed VQF, CAN/UART and diagnostics.
  *******************************************************************************/
 
 #include "debug.h"
 #include "ch32v20x_can.h"
 #include "fixed_vqf.h"
 #include "sections.h"
+#include "imu_numeric.h"
 
 #define BREATH_PWM_PERIOD       999U
 #define BREATH_STEP_DELAY_MS    1U
+#define SPI_TIMEOUT_LOOPS       4096U
+#define SENSOR_SPI_ERROR_LIMIT  5U
 
 #define LSM_CS_PORT             GPIOA
 #define LSM_CS_PIN              GPIO_Pin_4
@@ -26,8 +29,9 @@
 #define LSM_CTRL1_CONFIG        0x1AU /* HAODR high-performance accel, 2 kHz */
 #define LSM_CTRL2_CONFIG        0x1AU /* HAODR high-performance gyro, 2 kHz */
 #elif FIXED_VQF_SAMPLE_HZ == 1000U
-#define LSM_CTRL1_CONFIG        0x19U /* HAODR high-performance accel, 960 Hz */
-#define LSM_CTRL2_CONFIG        0x19U /* HAODR high-performance gyro, 960 Hz */
+/* Read every other fresh 2 kHz sample; VQF's fixed step remains 1 ms. */
+#define LSM_CTRL1_CONFIG        0x1AU /* HAODR high-performance accel, 2 kHz */
+#define LSM_CTRL2_CONFIG        0x1AU /* HAODR high-performance gyro, 2 kHz */
 #else
 #error "FIXED_VQF_SAMPLE_HZ must be 1000 or 2000"
 #endif
@@ -90,8 +94,15 @@ volatile int16_t lsm_accel_y = 0;
 volatile int16_t lsm_accel_z = 0;
 /* CAN transmit diagnostics, visible in WCH-Link/GDB. */
 volatile uint32_t can_tx_sequence = 0;
-volatile uint32_t can_tx_ok_count = 0;
+volatile uint32_t can_tx_ok_count = 0; /* confirmed by hardware */
+volatile uint32_t can_tx_submit_count = 0;
 volatile uint32_t can_tx_error_count = 0;
+volatile uint32_t can_tx_no_mailbox_count = 0;
+volatile uint32_t can_tx_failed_count = 0;
+volatile uint32_t lsm_spi_error_count = 0;
+volatile uint32_t lsm_spi_consecutive_errors = 0;
+volatile uint32_t accel_saturation_count = 0;
+volatile uint32_t can_gyro_saturation_count = 0;
 volatile uint8_t can_tx_last_status = CAN_TxStatus_Pending;
 volatile uint8_t can_tx_last_mailbox = 0xFFU;
 volatile uint8_t can_error_status = 0;
@@ -123,13 +134,17 @@ volatile int32_t vqf_quat_q30[4] = {VQF_Q30_ONE, 0, 0, 0};
 volatile uint32_t vqf_update_count = 0U;
 volatile uint8_t vqf_sample_pending = 0U;
 volatile uint32_t vqf_timer_ticks = 0U;
-volatile uint32_t vqf_missed_count = 0U;
+volatile uint32_t vqf_missed_count = 0U; /* ticks missed by busy main loop (ISR) */
+volatile uint32_t vqf_data_not_ready_count = 0U;
+volatile uint32_t vqf_spi_sample_error_count = 0U;
 static uint32_t vqf_sample_count = 0U;
 static fixed_vqf_t fixed_vqf;
 static int64_t gyro_lpf_state_q54[6] = {0};
 static uint8_t gyro_lpf_initialized = 0U;
 volatile q24_t vqf_gyro_filtered_q24[3] = {0, 0, 0};
 static uint8_t uart2_tx_dma_buffer[16];
+static uint8_t can_mailbox_active[3] = {0U, 0U, 0U};
+static uint8_t can_initialized = 0U;
 extern void TIM2_IRQHandler(void);
 /* 1 kHz task execution-time diagnostics. TIM2 counts at 1 MHz, so one count is 1 us. */
 volatile uint16_t cpu_busy_us_last = 0U;
@@ -200,10 +215,8 @@ SLOW_CODE static void CAN1_Init_1M(void)
     can.CAN_BS2 = CAN_BS2_3tq;
     can.CAN_Prescaler = 4U; /* 72 MHz PCLK1 / (4 * 18 tq) = 1 Mbit/s at 144 MHz SYSCLK. */
 
-    if(CAN_Init(CAN1, &can) != CAN_InitStatus_Success)
-    {
-        can_error_status = 0xE0U;
-    }
+    can_initialized = (CAN_Init(CAN1, &can) == CAN_InitStatus_Success) ? 1U : 0U;
+    if(can_initialized == 0U) can_error_status = 0xE0U;
 }
 
 SLOW_CODE static void UART2_Init_921600(void)
@@ -474,6 +487,16 @@ static void VQF_GyroSoftwareLPF(const q24_t input[3], q24_t output[3])
     }
 }
 
+/* Q1.30 cannot represent +/-4 g. Saturate instead of overflowing the
+ * signed multiply; retain a diagnostic so downstream can reject clipped data. */
+static q30_t VQF_AccelRawToQ30(int16_t raw, int32_t scale)
+{
+    uint8_t saturated;
+    q30_t value = imu_accel_raw_to_q30(raw, scale, &saturated);
+    accel_saturation_count += saturated;
+    return value;
+}
+
 static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
 {
     q24_t gyro_q24[3];
@@ -481,6 +504,7 @@ static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
     q30_t quat_q30[4];
     int32_t bias_q16[3];
     uint8_t i;
+    uint32_t accel_clipped_before = accel_saturation_count;
 
     /* No software floating point in the 1 kHz path. The RV32 M extension
      * executes the 32x32->64 products used by the fixed-point conversion. */
@@ -489,14 +513,14 @@ static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
     gyro_q24[2] = fixed_vqf_gyro_raw_to_q24(lsm_gyro_z);
 #if LSM6DSV_ACCEL_FS_4G
     /* +/-4 g, raw/8192 g -> Q1.30. */
-    accel_q30[0] = (q30_t)((int32_t)lsm_accel_x * 131072L);
-    accel_q30[1] = (q30_t)((int32_t)lsm_accel_y * 131072L);
-    accel_q30[2] = (q30_t)((int32_t)lsm_accel_z * 131072L);
+    accel_q30[0] = VQF_AccelRawToQ30(lsm_accel_x, 131072L);
+    accel_q30[1] = VQF_AccelRawToQ30(lsm_accel_y, 131072L);
+    accel_q30[2] = VQF_AccelRawToQ30(lsm_accel_z, 131072L);
 #else
     /* +/-2 g, raw/16384 g -> Q1.30. */
-    accel_q30[0] = (q30_t)((int32_t)lsm_accel_x * 65536L);
-    accel_q30[1] = (q30_t)((int32_t)lsm_accel_y * 65536L);
-    accel_q30[2] = (q30_t)((int32_t)lsm_accel_z * 65536L);
+    accel_q30[0] = VQF_AccelRawToQ30(lsm_accel_x, 65536L);
+    accel_q30[1] = VQF_AccelRawToQ30(lsm_accel_y, 65536L);
+    accel_q30[2] = VQF_AccelRawToQ30(lsm_accel_z, 65536L);
 #endif
 
     VQF_GyroSoftwareLPF(gyro_q24, gyro_q24);
@@ -504,7 +528,9 @@ static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
     vqf_gyro_filtered_q24[1] = gyro_q24[1];
     vqf_gyro_filtered_q24[2] = gyro_q24[2];
     fixed_vqf_update_gyr(&fixed_vqf, gyro_q24);
-    fixed_vqf_update_acc(&fixed_vqf, accel_q30);
+    /* A saturated axis no longer represents its measured magnitude. */
+    if(accel_saturation_count == accel_clipped_before)
+        fixed_vqf_update_acc(&fixed_vqf, accel_q30);
     fixed_vqf_get_q30(&fixed_vqf, quat_q30);
     fixed_vqf_get_bias_q16(&fixed_vqf, bias_q16);
 
@@ -541,6 +567,42 @@ static void VQF_UpdateFromLSM6DSV(uint8_t update_output)
         }
     }
 }
+/* Read and acknowledge each completed request before reusing its mailbox. */
+static void CAN1_PollTx(void)
+{
+    static const uint32_t done[3] = {
+        CAN_TSTATR_RQCP0, CAN_TSTATR_RQCP1, CAN_TSTATR_RQCP2
+    };
+    static const uint32_t ok[3] = {
+        CAN_TSTATR_TXOK0, CAN_TSTATR_TXOK1, CAN_TSTATR_TXOK2
+    };
+    uint32_t status;
+    uint8_t i;
+    if(can_initialized == 0U) return;
+    status = CAN1->TSTATR;
+    for(i = 0U; i < 3U; i++)
+    {
+        if((status & done[i]) == 0U) continue;
+        if(can_mailbox_active[i] != 0U)
+        {
+            if((status & ok[i]) != 0U)
+            {
+                can_tx_ok_count++;
+                can_tx_last_status = CAN_TxStatus_Ok;
+            }
+            else
+            {
+                can_tx_failed_count++;
+                can_tx_error_count++;
+                can_error_status = CAN1->ERRSR;
+                can_tx_last_status = CAN_TxStatus_Failed;
+            }
+            can_mailbox_active[i] = 0U;
+        }
+        CAN1->TSTATR = done[i];
+    }
+}
+
 static void CAN1_SendDamiaoFrame(uint16_t id, uint8_t reg, int16_t x, int16_t y, int16_t z)
 {
     CanTxMsg message = {0};
@@ -560,28 +622,31 @@ static void CAN1_SendDamiaoFrame(uint16_t id, uint8_t reg, int16_t x, int16_t y,
     message.Data[6] = (uint8_t)z;
     message.Data[7] = (uint8_t)((uint16_t)z >> 8);
 
+    CAN1_PollTx();
     mailbox = CAN_Transmit(CAN1, &message);
     can_tx_last_mailbox = mailbox;
     can_tx_last_status = CAN_TxStatus_Pending;
     if(mailbox == CAN_TxStatus_NoMailBox)
     {
         can_tx_error_count++;
+        can_tx_no_mailbox_count++;
         can_tx_last_status = CAN_TxStatus_NoMailBox;
         can_error_status = CAN1->ERRSR;
     }
-    else can_tx_ok_count++;
+    else
+    {
+        can_mailbox_active[mailbox] = 1U;
+        can_tx_submit_count++;
+    }
     can_tx_sequence++;
 }
 
 static int16_t LSM_GyroToCentiDps(int16_t raw)
 {
-#if LSM6DSV_GYRO_FS_2000DPS
-    /* +/-2000 dps, 70 mdps/LSB => 7 centi-dps/LSB. */
-    return (int16_t)((int32_t)raw * 7);
-#else
-    /* +/-125 dps, 4.375 mdps/LSB => 0.4375 centi-dps/LSB. */
-    return (int16_t)(((int32_t)raw * 7) / 16);
-#endif
+    uint8_t saturated;
+    int16_t value = imu_gyro_raw_to_centidps(raw, LSM6DSV_GYRO_FS_2000DPS, &saturated);
+    can_gyro_saturation_count += saturated;
+    return value;
 }
 
 static int16_t LSM_AccelToMg(int16_t raw)
@@ -602,6 +667,8 @@ static void CAN1_Service(uint16_t elapsed_ms)
     static uint16_t euler_elapsed = 0U;
     int16_t x, y, z;
 
+    if(can_initialized == 0U) return;
+    CAN1_PollTx();
     gyro_elapsed = (uint16_t)(gyro_elapsed + elapsed_ms);
     accel_elapsed = (uint16_t)(accel_elapsed + elapsed_ms);
     euler_elapsed = (uint16_t)(euler_elapsed + elapsed_ms);
@@ -738,50 +805,70 @@ SLOW_CODE static void LSM6DSV_SPI_Init(void)
     SPI_Cmd(SPI1, ENABLE);
 }
 
-static uint8_t SPI1_Transfer(uint8_t data)
+/* Only used after a failed transaction, with CS already deasserted. */
+static void SPI1_Recover(void)
 {
-    uint32_t timeout = 100000U;
+    SPI_Cmd(SPI1, DISABLE);
+    if((SPI1->STATR & (SPI_I2S_FLAG_RXNE | SPI_I2S_FLAG_OVR)) != 0U)
+        (void)SPI_I2S_ReceiveData(SPI1);
+    (void)SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_OVR);
+    SPI_Cmd(SPI1, ENABLE);
+    lsm_spi_error_count++;
+    lsm_spi_consecutive_errors++;
+}
 
-    while((SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE) == RESET) && (timeout > 0U))
-    {
-        timeout--;
-    }
+/* Bounded polling: never write or read a byte after its ready flag timed out. */
+static uint8_t SPI1_Transfer(uint8_t data, uint8_t *received)
+{
+    uint32_t timeout = SPI_TIMEOUT_LOOPS;
+    while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE) == RESET)
+        if(--timeout == 0U) return 0U;
     SPI_I2S_SendData(SPI1, data);
 
-    timeout = 100000U;
-    while((SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET) && (timeout > 0U))
-    {
-        timeout--;
-    }
-    return (uint8_t)SPI_I2S_ReceiveData(SPI1);
+    timeout = SPI_TIMEOUT_LOOPS;
+    while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET)
+        if(--timeout == 0U) return 0U;
+    *received = (uint8_t)SPI_I2S_ReceiveData(SPI1);
+    return 1U;
 }
 
-static uint8_t LSM6DSV_ReadReg(uint8_t reg)
+static uint8_t LSM6DSV_ReadReg(uint8_t reg, volatile uint8_t *value)
 {
-    uint8_t value;
-
+    uint8_t ignored;
+    uint8_t result;
+    uint8_t ok;
     GPIO_ResetBits(LSM_CS_PORT, LSM_CS_PIN);
-    SPI1_Transfer((uint8_t)(reg | 0x80U));
-    value = SPI1_Transfer(0xFFU);
+    ok = SPI1_Transfer((uint8_t)(reg | 0x80U), &ignored) &&
+         SPI1_Transfer(0xFFU, &result);
     GPIO_SetBits(LSM_CS_PORT, LSM_CS_PIN);
-    return value;
+    if(ok) *value = result;
+    if(!ok) SPI1_Recover();
+    return ok;
 }
 
-static void LSM6DSV_WriteReg(uint8_t reg, uint8_t value)
+static uint8_t LSM6DSV_WriteReg(uint8_t reg, uint8_t value)
 {
+    uint8_t ignored;
+    uint8_t ok;
     GPIO_ResetBits(LSM_CS_PORT, LSM_CS_PIN);
-    SPI1_Transfer((uint8_t)(reg & 0x7FU));
-    SPI1_Transfer(value);
+    ok = SPI1_Transfer((uint8_t)(reg & 0x7FU), &ignored) &&
+         SPI1_Transfer(value, &ignored);
     GPIO_SetBits(LSM_CS_PORT, LSM_CS_PIN);
+    if(!ok) SPI1_Recover();
+    return ok;
 }
 
-static void LSM6DSV_ReadBurst(uint8_t start_reg, uint8_t *data, uint8_t length)
+static uint8_t LSM6DSV_ReadBurst(uint8_t start_reg, uint8_t *data, uint8_t length)
 {
     uint8_t i;
+    uint8_t ignored;
+    uint8_t ok;
     GPIO_ResetBits(LSM_CS_PORT, LSM_CS_PIN);
-    SPI1_Transfer((uint8_t)(start_reg | 0x80U));
-    for(i = 0U; i < length; i++) data[i] = SPI1_Transfer(0xFFU);
+    ok = SPI1_Transfer((uint8_t)(start_reg | 0x80U), &ignored);
+    for(i = 0U; ok && i < length; i++) ok = SPI1_Transfer(0xFFU, &data[i]);
     GPIO_SetBits(LSM_CS_PORT, LSM_CS_PIN);
+    if(!ok) SPI1_Recover();
+    return ok;
 }
 
 static int16_t LSM6DSV_Pack16(const uint8_t *data)
@@ -789,17 +876,21 @@ static int16_t LSM6DSV_Pack16(const uint8_t *data)
     return (int16_t)(((uint16_t)data[1] << 8) | data[0]);
 }
 
+/* 0: not ready; 1: valid sample; 2: SPI transport error. */
 static uint8_t LSM6DSV_UpdateData(void)
 {
     uint8_t data[14];
-    lsm_status = LSM6DSV_ReadReg(LSM_STATUS_REG);
-    if((lsm_status & 0x03U) == 0x03U) lsm_data_ready_count++;
-    else {
+    uint8_t status;
+    if(!LSM6DSV_ReadReg(LSM_STATUS_REG, &status)) return 2U;
+    lsm_status = status;
+    if((status & 0x03U) != 0x03U)
+    {
         lsm_data_not_ready_count++;
         return 0U;
     }
-    /* One burst: temperature (2), gyro XYZ (6), accel XYZ (6). */
-    LSM6DSV_ReadBurst(LSM_OUT_TEMP_L_REG, data, 14U);
+    if(!LSM6DSV_ReadBurst(LSM_OUT_TEMP_L_REG, data, sizeof(data))) return 2U;
+    lsm_data_ready_count++;
+    lsm_spi_consecutive_errors = 0U;
     lsm_temperature_raw = LSM6DSV_Pack16(&data[0]);
     lsm_gyro_x = LSM6DSV_Pack16(&data[2]);
     lsm_gyro_y = LSM6DSV_Pack16(&data[4]);
@@ -813,35 +904,37 @@ static uint8_t LSM6DSV_UpdateData(void)
 SLOW_CODE static void LSM6DSV_Test(void)
 {
     int32_t accel_activity;
+    uint8_t sample;
 
+    lsm_test_result = 0U;
     Delay_Ms(20);
-    lsm_who_am_i = LSM6DSV_ReadReg(LSM_WHO_AM_I_REG);
+    if(!LSM6DSV_ReadReg(LSM_WHO_AM_I_REG, &lsm_who_am_i))
+        goto spi_error;
     if(lsm_who_am_i != LSM_WHO_AM_I_VALUE)
     {
-        lsm_test_result = 0xE1U; /* SPI/device ID failure. */
+        lsm_test_result = 0xE1U;
         return;
     }
 
-    /* ST HAODR transition sequence: power down both channels, select HAODR,
-     * start the gyroscope, wait at least 20 us, then start the accelerometer. */
-    LSM6DSV_WriteReg(LSM_CTRL3_REG, LSM_CTRL3_CONFIG);
-    LSM6DSV_WriteReg(LSM_CTRL1_REG, 0x00U);
-    LSM6DSV_WriteReg(LSM_CTRL2_REG, 0x00U);
-    LSM6DSV_WriteReg(LSM_HAODR_CFG_REG, LSM_HAODR_CFG_CONFIG);
-    LSM6DSV_WriteReg(LSM_CTRL2_REG, LSM_CTRL2_CONFIG);
+    /* Power down, select HAODR, then start gyro before accelerometer. */
+    if(!LSM6DSV_WriteReg(LSM_CTRL3_REG, LSM_CTRL3_CONFIG) ||
+       !LSM6DSV_WriteReg(LSM_CTRL1_REG, 0x00U) ||
+       !LSM6DSV_WriteReg(LSM_CTRL2_REG, 0x00U) ||
+       !LSM6DSV_WriteReg(LSM_HAODR_CFG_REG, LSM_HAODR_CFG_CONFIG) ||
+       !LSM6DSV_WriteReg(LSM_CTRL2_REG, LSM_CTRL2_CONFIG)) goto spi_error;
     Delay_Ms(1);
-    LSM6DSV_WriteReg(LSM_CTRL1_REG, LSM_CTRL1_CONFIG);
-    LSM6DSV_WriteReg(LSM_CTRL6_REG, LSM_CTRL6_CONFIG);
-    LSM6DSV_WriteReg(LSM_CTRL7_REG, LSM_CTRL7_CONFIG);
-    LSM6DSV_WriteReg(LSM_CTRL8_REG, LSM_CTRL8_CONFIG);
+    if(!LSM6DSV_WriteReg(LSM_CTRL1_REG, LSM_CTRL1_CONFIG) ||
+       !LSM6DSV_WriteReg(LSM_CTRL6_REG, LSM_CTRL6_CONFIG) ||
+       !LSM6DSV_WriteReg(LSM_CTRL7_REG, LSM_CTRL7_CONFIG) ||
+       !LSM6DSV_WriteReg(LSM_CTRL8_REG, LSM_CTRL8_CONFIG)) goto spi_error;
     Delay_Ms(40);
-    lsm_ctrl1 = LSM6DSV_ReadReg(LSM_CTRL1_REG);
-    lsm_ctrl2 = LSM6DSV_ReadReg(LSM_CTRL2_REG);
-    lsm_ctrl3 = LSM6DSV_ReadReg(LSM_CTRL3_REG);
-    lsm_ctrl6 = LSM6DSV_ReadReg(LSM_CTRL6_REG);
-    lsm_ctrl7 = LSM6DSV_ReadReg(LSM_CTRL7_REG);
-    lsm_ctrl8 = LSM6DSV_ReadReg(LSM_CTRL8_REG);
-    lsm_haodr_cfg = LSM6DSV_ReadReg(LSM_HAODR_CFG_REG);
+    if(!LSM6DSV_ReadReg(LSM_CTRL1_REG, &lsm_ctrl1) ||
+       !LSM6DSV_ReadReg(LSM_CTRL2_REG, &lsm_ctrl2) ||
+       !LSM6DSV_ReadReg(LSM_CTRL3_REG, &lsm_ctrl3) ||
+       !LSM6DSV_ReadReg(LSM_CTRL6_REG, &lsm_ctrl6) ||
+       !LSM6DSV_ReadReg(LSM_CTRL7_REG, &lsm_ctrl7) ||
+       !LSM6DSV_ReadReg(LSM_CTRL8_REG, &lsm_ctrl8) ||
+       !LSM6DSV_ReadReg(LSM_HAODR_CFG_REG, &lsm_haodr_cfg)) goto spi_error;
     if((lsm_ctrl1 != LSM_CTRL1_CONFIG) || (lsm_ctrl2 != LSM_CTRL2_CONFIG) ||
        ((lsm_ctrl3 & LSM_CTRL3_CONFIG) != LSM_CTRL3_CONFIG) ||
        (lsm_ctrl6 != LSM_CTRL6_CONFIG) ||
@@ -849,24 +942,28 @@ SLOW_CODE static void LSM6DSV_Test(void)
        ((lsm_ctrl8 & 0x03U) != LSM_CTRL8_CONFIG) ||
        ((lsm_haodr_cfg & 0x03U) != LSM_HAODR_CFG_CONFIG))
     {
-        lsm_test_result = 0xE2U; /* Register write/readback failure. */
+        lsm_test_result = 0xE2U;
         return;
     }
 
     Delay_Ms(100);
-    LSM6DSV_UpdateData();
+    sample = LSM6DSV_UpdateData();
+    if(sample == 2U) goto spi_error;
+    if(sample == 0U) { lsm_test_result = 0xE3U; return; }
     accel_activity = (lsm_accel_x < 0) ? -(int32_t)lsm_accel_x : lsm_accel_x;
     accel_activity += (lsm_accel_y < 0) ? -(int32_t)lsm_accel_y : lsm_accel_y;
     accel_activity += (lsm_accel_z < 0) ? -(int32_t)lsm_accel_z : lsm_accel_z;
-
     if((accel_activity < 500) ||
        ((lsm_accel_x == -1) && (lsm_accel_y == -1) && (lsm_accel_z == -1)))
     {
-        lsm_test_result = 0xE3U; /* Output data is not plausible. */
+        lsm_test_result = 0xE3U;
         return;
     }
-
-    lsm_test_result = 3U; /* ID, configuration and live data all passed. */
+    lsm_spi_consecutive_errors = 0U;
+    lsm_test_result = 3U;
+    return;
+spi_error:
+    lsm_test_result = 0xE4U;
 }
 
 int main(void)
@@ -878,6 +975,9 @@ int main(void)
     uint16_t cpu_busy_us;
     uint8_t output_phase = 0U;
     uint8_t output_due;
+    uint8_t sample_result;
+    uint8_t timer_was_enabled = 1U;
+    uint32_t irq_status;
 
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
     SystemCoreClockUpdate();
@@ -894,9 +994,16 @@ int main(void)
     {
         if(lsm_test_result == 3U)
         {
-            /* TIM2 supplies the fixed 0.5 ms cadence for the 2 kHz VQF. */
+            /* TIM2 supplies the fixed VQF cadence (0.5 ms at default 2 kHz). */
             if(vqf_sample_pending == 0U) continue;
+            /* Atomic disable-and-save of MIE; only restore it if already set. */
+            __asm volatile ("csrrc %0, mstatus, %1"
+                            : "=r"(irq_status) : "r"(0x8U) : "memory");
+            sample_result = vqf_sample_pending;
             vqf_sample_pending = 0U;
+            if((irq_status & 0x8U) != 0U)
+                __asm volatile ("csrs mstatus, %0" :: "r"(0x8U) : "memory");
+            if(sample_result == 0U) continue;
             cpu_start_us = (uint16_t)TIM2->CNT;
 
             output_phase++;
@@ -907,10 +1014,17 @@ int main(void)
                 output_due = 1U;
             }
 
-            if(LSM6DSV_UpdateData() == 0U)
+            sample_result = LSM6DSV_UpdateData();
+            if(sample_result != 1U)
             {
-                vqf_missed_count++;
-                continue;
+                if(sample_result == 0U) vqf_data_not_ready_count++;
+                else
+                {
+                    vqf_spi_sample_error_count++;
+                    if(lsm_spi_consecutive_errors >= SENSOR_SPI_ERROR_LIMIT)
+                        lsm_test_result = 0xE4U;
+                }
+                goto sample_done;
             }
             VQF_UpdateFromLSM6DSV(output_due);
             if(output_due != 0U)
@@ -929,6 +1043,7 @@ int main(void)
                 brightness = (uint16_t)((int32_t)brightness + step);
             }
 
+sample_done:
             cpu_end_us = (uint16_t)TIM2->CNT;
             if(cpu_end_us >= cpu_start_us)
             {
@@ -939,6 +1054,7 @@ int main(void)
                 cpu_busy_us = (uint16_t)(VQF_PERIOD_US + cpu_end_us - cpu_start_us);
             }
 
+            CAN1_PollTx();
             cpu_busy_us_last = cpu_busy_us;
             if(cpu_busy_us > cpu_busy_us_max) cpu_busy_us_max = cpu_busy_us;
             cpu_busy_us_sum += cpu_busy_us;
@@ -954,13 +1070,36 @@ int main(void)
         }
         else
         {
-            /* Sensor failure: fast LED blink while CAN remains active. */
+            /* Never publish stale IMU values during a sensor fault. */
+            if(timer_was_enabled != 0U)
+            {
+                TIM_Cmd(TIM2, DISABLE);
+                TIM_ITConfig(TIM2, TIM_IT_Update, DISABLE);
+                timer_was_enabled = 0U;
+            }
             TIM_SetCompare2(TIM1, BREATH_PWM_PERIOD);
             Delay_Ms(100);
-            CAN1_Service(100U);
-            TIM_SetCompare2(TIM1, 0);
+            CAN1_PollTx();
+            TIM_SetCompare2(TIM1, 0U);
             Delay_Ms(100);
-            CAN1_Service(100U);
+            CAN1_PollTx();
+            LSM6DSV_SPI_Init();
+            LSM6DSV_Test();
+            if(lsm_test_result == 3U)
+            {
+                fixed_vqf_init(&fixed_vqf);
+                gyro_lpf_initialized = 0U;
+                vqf_update_count = 0U;
+                vqf_sample_count = 0U;
+                yaw_test_status = 0U;
+                output_phase = 0U;
+                vqf_sample_pending = 0U;
+                TIM_SetCounter(TIM2, 0U);
+                TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
+                TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
+                TIM_Cmd(TIM2, ENABLE);
+                timer_was_enabled = 1U;
+            }
         }
     }
 }

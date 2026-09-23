@@ -57,6 +57,8 @@ UART 转换器必须连接到 **PA2**，不能将 WCH-Link 调试串口或其他
 
 将对应宏改为 `1U` 后重新编译即可启用 ±2000 dps 或 ±4 g。
 
+**量程限制：** 在 ±4 g 模式下，超过约 ±2 g 的加速度轴会在 Q1.30 中饱和，该帧不用于加速度校正，同时增加 `accel_saturation_count`。CAN 角速度仍为 0.01 dps/LSB（范围约 ±327.67 dps）；±2000 dps 模式超出该范围时饱和并增加 `can_gyro_saturation_count`。如需传输全量程，须同步修改协议和接收端。
+
 ```c
 #define FIXED_VQF_SAMPLE_HZ     2000U
 #define FIXED_VQF_MOTION_BIAS_ENABLED 1U
@@ -83,7 +85,7 @@ LSM6DSV 默认配置为：
 - 陀螺仪 LPF1 约 101 Hz
 - 软件端另有定点二阶低通滤波
 
-如需改为约 1 kHz 采样，将 `FIXED_VQF_SAMPLE_HZ` 改为 `1000U`，并重新编译、烧录和验证。
+如需 1 kHz 融合，将 `FIXED_VQF_SAMPLE_HZ` 改为 `1000U` 并重新编译。传感器仍使用 2 kHz HAODR，每 1 ms 读取一次最新样本，避免 960 Hz 传感器档位与 VQF 1 ms 积分步长不一致。切换后应在硬件上验证采样时序和漂移。
 
 ## 定点数据格式
 
@@ -211,7 +213,7 @@ Resetting Target
 | `lsm_data_ready_count` | 有效传感器采样次数 |
 | `lsm_data_not_ready_count` | 未准备好次数 |
 | `vqf_update_count` | VQF 更新次数 |
-| `vqf_missed_count` | 未读取到新数据的次数 |
+| `vqf_missed_count` | ISR 检测到主循环未及时消费定时事件的次数 |
 | `vqf_euler_q16[3]` | 内部 Q16.16 欧拉角 |
 | `gyro_cal_bias_q16[3]` | 当前估计的 gyro bias |
 | `cpu_load_permille` | CPU 占用率，千分比 |
@@ -226,6 +228,13 @@ CPU 占用率的换算：
 ```text
 CPU 占用率（%） = cpu_load_permille / 10
 ```
+
+## 修复后的故障诊断
+
+- `lsm_spi_error_count` 与 `lsm_spi_consecutive_errors`：SPI 事务错误总数/连续错误数。连续出错五次后停止传感器输出，约每 200 ms 重试一次自检；恢复后重置滤波和 VQF 状态。
+- `vqf_missed_count`：ISR 发现的定时积压；`vqf_data_not_ready_count`：无新数据；`vqf_spi_sample_error_count`：采样期间 SPI 错误。
+- `can_tx_submit_count`：提交到邮箱；`can_tx_ok_count`：硬件确认发送成功；`can_tx_failed_count` 与 `can_tx_no_mailbox_count`：发送失败及邮箱不足。提交不等于发送成功。
+- 主机端数值边界测试：`gcc -std=c99 -Wall -Wextra -Werror -IUser tests/test_imu_numeric.c -o test_imu_numeric && ./test_imu_numeric`。定时与总线故障仍需真机测试。
 
 ## Yaw 说明
 
