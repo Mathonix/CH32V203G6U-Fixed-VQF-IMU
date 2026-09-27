@@ -12,6 +12,38 @@
 * microcontroller manufactured by Nanjing Qinheng Microelectronics.
 *******************************************************************************/
 #include "ch32v20x.h" 
+#include "ch32v20x_iwdg.h"
+#include "ch32v20x_rcc.h"
+
+volatile uint32_t system_reset_flags;
+
+/* Clock setup cannot use Delay_* before SystemCoreClock is established. */
+static void ClockWait(volatile uint32_t *reg, uint32_t mask, uint32_t expected)
+{
+    uint32_t remaining = 1000000U;
+    while((*reg & mask) != expected) {
+        if(--remaining == 0U) {
+            /* Runtime bus timing assumes 144 MHz: retry boot rather than
+             * silently transmitting with incorrect CAN/UART baud rates. */
+            NVIC_SystemReset();
+            while(1) { }
+        }
+    }
+}
+
+static void StartupWatchdog(void)
+{
+    system_reset_flags = RCC->RSTSCKR;
+    RCC_ClearFlag();
+    RCC_LSICmd(ENABLE);
+    ClockWait(&RCC->RSTSCKR, RCC_LSIRDY, RCC_LSIRDY);
+    IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
+    IWDG_SetPrescaler(IWDG_Prescaler_64);
+    IWDG_SetReload(1249U); /* About 2 seconds at nominal 40 kHz LSI. */
+    ClockWait(&IWDG->STATR, IWDG_FLAG_PVU | IWDG_FLAG_RVU, 0U);
+    IWDG_ReloadCounter();
+    IWDG_Enable();
+}
 
 /* 
 * Uncomment the line corresponding to the desired System clock (SYSCLK) frequency (after 
@@ -110,6 +142,7 @@ static void SetSysClockTo144_HSI( void );
  */
 void SystemInit (void)
 {
+  StartupWatchdog();
   RCC->CTLR |= (uint32_t)0x00000001;
   RCC->CFGR0 &= (uint32_t)0xF0FF0000;
   RCC->CTLR &= (uint32_t)0xFEF6FFFF;
@@ -971,16 +1004,12 @@ static void SetSysClockTo144_HSI(void)
     /* Enable PLL */
     RCC->CTLR |= RCC_PLLON;
     /* Wait till PLL is ready */
-    while((RCC->CTLR & RCC_PLLRDY) == 0)
-    {
-    }
+    ClockWait(&RCC->CTLR, RCC_PLLRDY, RCC_PLLRDY);
     /* Select PLL as system clock source */
     RCC->CFGR0 &= (uint32_t)((uint32_t)~(RCC_SW));
     RCC->CFGR0 |= (uint32_t)RCC_SW_PLL;
     /* Wait till PLL is used as system clock source */
-    while ((RCC->CFGR0 & (uint32_t)RCC_SWS) != (uint32_t)0x08)
-    {
-    }
+    ClockWait(&RCC->CFGR0, RCC_SWS, 0x08U);
 }
 
 

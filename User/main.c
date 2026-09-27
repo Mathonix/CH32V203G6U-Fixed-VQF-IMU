@@ -5,6 +5,7 @@
 
 #include "debug.h"
 #include "ch32v20x_can.h"
+#include "ch32v20x_iwdg.h"
 #include "fixed_vqf.h"
 #include "sections.h"
 #include "imu_numeric.h"
@@ -13,6 +14,7 @@
 #define BREATH_STEP_DELAY_MS    1U
 #define SPI_TIMEOUT_LOOPS       4096U
 #define SENSOR_SPI_ERROR_LIMIT  5U
+#define SENSOR_READY_TIMEOUT_TICKS (FIXED_VQF_SAMPLE_HZ / 10U) /* 100 ms */
 
 #define LSM_CS_PORT             GPIOA
 #define LSM_CS_PIN              GPIO_Pin_4
@@ -105,7 +107,7 @@ volatile uint32_t accel_saturation_count = 0;
 volatile uint32_t can_gyro_saturation_count = 0;
 volatile uint8_t can_tx_last_status = CAN_TxStatus_Pending;
 volatile uint8_t can_tx_last_mailbox = 0xFFU;
-volatile uint8_t can_error_status = 0;
+volatile uint32_t can_error_status = 0;
 volatile uint32_t uart_tx_frame_count = 0U;
 volatile uint32_t uart_tx_dma_busy_count = 0U;
 volatile uint32_t can_gyro_tx_count = 0U;
@@ -137,6 +139,7 @@ volatile uint32_t vqf_timer_ticks = 0U;
 volatile uint32_t vqf_missed_count = 0U; /* ticks missed by busy main loop (ISR) */
 volatile uint32_t vqf_data_not_ready_count = 0U;
 volatile uint32_t vqf_spi_sample_error_count = 0U;
+volatile uint32_t lsm_ready_timeout_count = 0U;
 static uint32_t vqf_sample_count = 0U;
 static fixed_vqf_t fixed_vqf;
 static int64_t gyro_lpf_state_q54[6] = {0};
@@ -146,15 +149,34 @@ static uint8_t uart2_tx_dma_buffer[16];
 static uint8_t can_mailbox_active[3] = {0U, 0U, 0U};
 static uint8_t can_initialized = 0U;
 extern void TIM2_IRQHandler(void);
-/* 1 kHz task execution-time diagnostics. TIM2 counts at 1 MHz, so one count is 1 us. */
-volatile uint16_t cpu_busy_us_last = 0U;
-volatile uint16_t cpu_busy_us_avg = 0U;
-volatile uint16_t cpu_busy_us_max = 0U;
-volatile uint16_t cpu_load_permille = 0U; /* Average busy time / sample period, in per mille. */
-volatile uint32_t cpu_busy_us_sum = 0U;
+/* Extended TIM2 timestamps retain elapsed time across multiple sample periods. */
+volatile uint32_t cpu_busy_us_last = 0U;
+volatile uint32_t cpu_busy_us_avg = 0U;
+volatile uint32_t cpu_busy_us_max = 0U;
+volatile uint32_t cpu_load_permille = 0U; /* May exceed 1000 on overload. */
+volatile uint64_t cpu_busy_us_sum = 0U;
+volatile uint32_t cpu_deadline_miss_count = 0U;
 volatile uint16_t cpu_busy_samples = 0U;
 
 
+
+static uint32_t VQF_TimeUs(void)
+{
+    uint32_t irq_status, ticks, counter;
+    /* Keep this critical section shorter than one TIM2 period. Account for
+     * an update that occurred before its ISR could increment the tick. */
+    __asm volatile ("csrrc %0, mstatus, %1"
+                    : "=r"(irq_status) : "r"(0x8U) : "memory");
+    ticks = vqf_timer_ticks;
+    counter = TIM2->CNT;
+    if((TIM2->INTFR & TIM_IT_Update) != 0U) {
+        ticks++;
+        counter = TIM2->CNT;
+    }
+    if((irq_status & 0x8U) != 0U)
+        __asm volatile ("csrs mstatus, %0" :: "r"(0x8U) : "memory");
+    return ticks * VQF_PERIOD_US + counter;
+}
 
 SLOW_CODE static void VQF_SampleTimer_Init(void)
 {
@@ -224,15 +246,12 @@ SLOW_CODE static void UART2_Init_921600(void)
     GPIO_InitTypeDef gpio = {0};
     USART_InitTypeDef uart = {0};
 
-    /* USART2 default mapping: PA2=TX, PA3=RX. */
+    /* Transmit-only telemetry on PA2; no receive protocol is implemented. */
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
     gpio.GPIO_Pin = GPIO_Pin_2;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     gpio.GPIO_Mode = GPIO_Mode_AF_PP;
-    GPIO_Init(GPIOA, &gpio);
-    gpio.GPIO_Pin = GPIO_Pin_3;
-    gpio.GPIO_Mode = GPIO_Mode_IN_FLOATING;
     GPIO_Init(GPIOA, &gpio);
 
     uart.USART_BaudRate = UART_BAUD_RATE;
@@ -240,7 +259,7 @@ SLOW_CODE static void UART2_Init_921600(void)
     uart.USART_StopBits = USART_StopBits_1;
     uart.USART_Parity = USART_Parity_No;
     uart.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-    uart.USART_Mode = USART_Mode_Tx | USART_Mode_Rx;
+    uart.USART_Mode = USART_Mode_Tx;
     USART_Init(USART2, &uart);
     USART_Cmd(USART2, ENABLE);
 
@@ -272,7 +291,7 @@ SLOW_CODE static void UART2_Init_921600(void)
 
 static int32_t VQF_Q30_Mul2(int32_t a, int32_t b)
 {
-    int64_t value = ((int64_t)a * (int64_t)b) >> 29;
+    int64_t value = imu_asr64((int64_t)a * (int64_t)b, 29U);
     if(value > 2147483647LL) value = 2147483647LL;
     if(value < -2147483648LL) value = -2147483648LL;
     return (int32_t)value;
@@ -307,8 +326,8 @@ static int32_t VQF_Atan2_DegQ16(int32_t y_in, int32_t x_in)
         58666, 29335, 14668, 7334, 3667, 1833, 917, 458,
         229, 115, 57, 29, 14, 7, 4, 2, 1
     };
-    int32_t x = x_in >> 2;
-    int32_t y = y_in >> 2;
+    int32_t x = imu_asr32(x_in, 2U);
+    int32_t y = imu_asr32(y_in, 2U);
     int32_t angle_q16 = 0;
     uint8_t i;
 
@@ -326,14 +345,14 @@ static int32_t VQF_Atan2_DegQ16(int32_t y_in, int32_t x_in)
         old_x = x;
         if(y > 0)
         {
-            x += y >> i;
-            y -= old_x >> i;
+            x += imu_asr32(y, i);
+            y -= imu_asr32(old_x, i);
             angle_q16 += atan_deg_q16[i];
         }
         else
         {
-            x -= y >> i;
-            y += old_x >> i;
+            x -= imu_asr32(y, i);
+            y += imu_asr32(old_x, i);
             angle_q16 -= atan_deg_q16[i];
         }
     }
@@ -423,7 +442,7 @@ static int32_t VQF_WrapDeltaDegQ16(int32_t delta_q16)
 
 static int16_t VQF_Q30_To_Q15(int32_t value)
 {
-    int32_t q = value >> 15;
+    int32_t q = imu_asr32(value, 15U);
     if(q > 32767) q = 32767;
     if(q < -32768) q = -32768;
     return (int16_t)q;
@@ -970,9 +989,9 @@ int main(void)
 {
     uint16_t brightness = 0;
     int16_t step = 2;
-    uint16_t cpu_start_us;
-    uint16_t cpu_end_us;
-    uint16_t cpu_busy_us;
+    uint32_t cpu_start_us;
+    uint32_t cpu_busy_us;
+    uint32_t sensor_last_ready_tick = 0U;
     uint8_t output_phase = 0U;
     uint8_t output_due;
     uint8_t sample_result;
@@ -1004,7 +1023,7 @@ int main(void)
             if((irq_status & 0x8U) != 0U)
                 __asm volatile ("csrs mstatus, %0" :: "r"(0x8U) : "memory");
             if(sample_result == 0U) continue;
-            cpu_start_us = (uint16_t)TIM2->CNT;
+            cpu_start_us = VQF_TimeUs();
 
             output_phase++;
             output_due = 0U;
@@ -1024,8 +1043,16 @@ int main(void)
                     if(lsm_spi_consecutive_errors >= SENSOR_SPI_ERROR_LIMIT)
                         lsm_test_result = 0xE4U;
                 }
+                /* Includes intermittent SPI errors: only a fresh sample
+                 * resets the liveness deadline. Unsigned subtraction wraps. */
+                if((uint32_t)(vqf_timer_ticks - sensor_last_ready_tick) >=
+                   SENSOR_READY_TIMEOUT_TICKS) {
+                    lsm_ready_timeout_count++;
+                    lsm_test_result = 0xE5U;
+                }
                 goto sample_done;
             }
+            sensor_last_ready_tick = vqf_timer_ticks;
             VQF_UpdateFromLSM6DSV(output_due);
             if(output_due != 0U)
             {
@@ -1044,28 +1071,23 @@ int main(void)
             }
 
 sample_done:
-            cpu_end_us = (uint16_t)TIM2->CNT;
-            if(cpu_end_us >= cpu_start_us)
-            {
-                cpu_busy_us = (uint16_t)(cpu_end_us - cpu_start_us);
-            }
-            else
-            {
-                cpu_busy_us = (uint16_t)(VQF_PERIOD_US + cpu_end_us - cpu_start_us);
-            }
-
             CAN1_PollTx();
+            cpu_busy_us = VQF_TimeUs() - cpu_start_us;
+            if(cpu_busy_us >= VQF_PERIOD_US) cpu_deadline_miss_count++;
             cpu_busy_us_last = cpu_busy_us;
             if(cpu_busy_us > cpu_busy_us_max) cpu_busy_us_max = cpu_busy_us;
             cpu_busy_us_sum += cpu_busy_us;
             cpu_busy_samples++;
             if(cpu_busy_samples >= FIXED_VQF_SAMPLE_HZ)
             {
-                cpu_busy_us_avg = (uint16_t)(cpu_busy_us_sum / cpu_busy_samples);
-                cpu_load_permille = (uint16_t)(((uint32_t)cpu_busy_us_avg * 1000U) / VQF_PERIOD_US);
+                cpu_busy_us_avg = (uint32_t)(cpu_busy_us_sum / cpu_busy_samples);
+                cpu_load_permille = (uint32_t)(((uint64_t)cpu_busy_us_avg * 1000U) / VQF_PERIOD_US);
                 cpu_busy_us_sum = 0U;
                 cpu_busy_samples = 0U;
             }
+            /* Feed only after completing a scheduled iteration. If TIM2 or
+             * the main loop stalls, the independent watchdog resets us. */
+            IWDG_ReloadCounter();
 
         }
         else
@@ -1093,6 +1115,7 @@ sample_done:
                 vqf_sample_count = 0U;
                 yaw_test_status = 0U;
                 output_phase = 0U;
+                sensor_last_ready_tick = vqf_timer_ticks;
                 vqf_sample_pending = 0U;
                 TIM_SetCounter(TIM2, 0U);
                 TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
@@ -1100,6 +1123,8 @@ sample_done:
                 TIM_Cmd(TIM2, ENABLE);
                 timer_was_enabled = 1U;
             }
+            /* A completed bounded recovery attempt is also forward progress. */
+            IWDG_ReloadCounter();
         }
     }
 }

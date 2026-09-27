@@ -935,12 +935,15 @@ void setMagDistRejectionEnabled(bool enabled)
 
 void setTauAcc(vqf_real_t tauAcc)
 {
+    if (!isfinite(tauAcc) || tauAcc <= 0) {
+        return;
+    }
     if (params.tauAcc == tauAcc) {
         return;
     }
     params.tauAcc = tauAcc;
     vqf_double_t newB[3];
-    vqf_double_t newA[3];
+    vqf_double_t newA[2];
 
     filterCoeffs(params.tauAcc, coeffs.accTs, newB, newA);
     filterAdaptStateForCoeffChange(state.lastAccLp, 3, coeffs.accLpB, coeffs.accLpA, newB, newA, state.accLpState);
@@ -958,14 +961,17 @@ void setTauAcc(vqf_real_t tauAcc)
     }
     filterAdaptStateForCoeffChange(biasLp, 2, coeffs.accLpB, coeffs.accLpA, newB, newA, state.motionBiasEstBiasLpState);
 
-    memcpy(coeffs.accLpB, newB, sizeof(newB));
+    memcpy(coeffs.accLpB, newB, sizeof(coeffs.accLpB));
     // std::copy(newB, newB+3, coeffs.accLpB);
-    memcpy(coeffs.accLpA, newA, sizeof(newA));
+    memcpy(coeffs.accLpA, newA, sizeof(coeffs.accLpA));
     // std::copy(newA, newA+2, coeffs.accLpA);
 }
 
 void setTauMag(vqf_real_t tauMag)
 {
+    if (!isfinite(tauMag) || tauMag < 0) {
+        return;
+    }
     params.tauMag = tauMag;
     coeffs.kMag = gainFromTau(params.tauMag, coeffs.magTs);
 }
@@ -1074,9 +1080,14 @@ SLOW_CODE void setup()
 
 SLOW_CODE void initVqf(vqf_real_t gyrTs, vqf_real_t accTs, vqf_real_t magTs)
 {
+    /* The reference implementation is not part of the default firmware,
+     * but keep its public API finite and division-safe when enabled. */
+    if (!isfinite(gyrTs) || gyrTs <= 0) gyrTs = TICK_INTERVAL;
+    if (!isfinite(accTs) || accTs <= 0) accTs = gyrTs;
+    if (!isfinite(magTs) || magTs <= 0) magTs = gyrTs;
     coeffs.gyrTs = gyrTs;
-    coeffs.accTs = accTs > 0 ? accTs : gyrTs;
-    coeffs.magTs = magTs > 0 ? magTs : gyrTs;
+    coeffs.accTs = accTs;
+    coeffs.magTs = magTs;
 
     init_params();
     setup();

@@ -11,6 +11,8 @@
  * microcontroller manufactured by Nanjing Qinheng Microelectronics.
  *******************************************************************************/
 #include "debug.h"
+#include "heap_bounds.h"
+#include <errno.h>
 
 static uint8_t  p_us = 0;
 static uint16_t p_ms = 0;
@@ -250,11 +252,16 @@ void *_sbrk(ptrdiff_t incr)
 {
     extern char _end[];
     extern char _heap_end[];
-    static char *curbrk = _end;
+    static uintptr_t curbrk;
+    uintptr_t next;
+    uintptr_t previous;
 
-    if ((curbrk + incr < _end) || (curbrk + incr > _heap_end))
-    return NULL - 1;
-
-    curbrk += incr;
-    return curbrk - incr;
+    if(curbrk == 0U) curbrk = (uintptr_t)_end;
+    previous = curbrk;
+    if(!heap_adjust(curbrk, (uintptr_t)_end, (uintptr_t)_heap_end, incr, &next)) {
+        errno = ENOMEM;
+        return (void *)-1;
+    }
+    curbrk = next;
+    return (void *)previous;
 }

@@ -35,7 +35,7 @@
 | LSM6DSV SPI | SPI 外设，片选 PA4 |
 | LSM6DSV CS | PA4 |
 | UART TX | USART2_TX，PA2 |
-| UART RX | USART2_RX，PA3 |
+| UART RX | 未使用（接收端已关闭） |
 | CAN | CAN1_TX/CAN1_RX |
 | 状态灯/呼吸灯 | PA9 |
 | 调试/烧录 | WCH-Link |
@@ -217,6 +217,8 @@ Resetting Target
 | `vqf_euler_q16[3]` | 内部 Q16.16 欧拉角 |
 | `gyro_cal_bias_q16[3]` | 当前估计的 gyro bias |
 | `cpu_load_permille` | CPU 占用率，千分比 |
+| `cpu_deadline_miss_count` | 主循环处理时间达到或超过采样周期的次数 |
+| `lsm_ready_timeout_count` | 传感器连续无新数据并触发恢复的次数 |
 | `can_tx_error_count` | CAN 发送错误次数 |
 | `uart_tx_frame_count` | UART DMA 提交帧数 |
 | `uart_tx_dma_busy_count` | UART DMA 忙时丢弃次数 |

@@ -28,6 +28,7 @@ extern volatile uint32_t vqf_missed_count;
  */
 void NMI_Handler(void)
 {
+  NVIC_SystemReset();
   while (1)
   {
   }

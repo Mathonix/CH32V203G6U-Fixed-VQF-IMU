@@ -1,7 +1,9 @@
 #include "fixed_vqf.h"
 #include "sections.h"
+#include "imu_numeric.h"
 
 #include <limits.h>
+#include <string.h>
 
 #define Q30_ONE                 ((q30_t)0x40000000)
 #define Q30_HALF                ((q30_t)0x20000000)
@@ -352,7 +354,7 @@ static FAST_CODE void get_quat6d(const fixed_vqf_t *s, q30_t out[4])
 static FAST_CODE void bias_kalman_update(fixed_vqf_t *s, const q30_t H[9],
                                          const int64_t e0[3], const int64_t W[3])
 {
-    int64_t bias_start[3] = {s->gyro_bias_q32[0],s->gyro_bias_q32[1],s->gyro_bias_q32[2]};
+    const int64_t bias_start[3] = {s->gyro_bias_q32[0],s->gyro_bias_q32[1],s->gyro_bias_q32[2]};
     uint32_t meas;
 
     for (meas=0U; meas<3U; ++meas) {
@@ -417,9 +419,7 @@ q24_t fixed_vqf_gyro_raw_to_q24(int16_t raw)
 
 SLOW_CODE void fixed_vqf_init(fixed_vqf_t *s)
 {
-    uint32_t i;
-    uint32_t words=(uint32_t)(sizeof(*s)/sizeof(uint32_t));
-    for (i=0U; i<words; ++i) ((uint32_t*)s)[i]=0U;
+    memset(s, 0, sizeof(*s));
     s->gyr_q[0]=Q30_ONE;
     s->acc_q[0]=Q30_ONE;
     s->bias_P_q20[0]=BIAS_P0_Q20;
@@ -427,7 +427,7 @@ SLOW_CODE void fixed_vqf_init(fixed_vqf_t *s)
     s->bias_P_q20[8]=BIAS_P0_Q20;
 }
 
-FAST_CODE void fixed_vqf_update_gyr(fixed_vqf_t *s, const q24_t gyr[3])
+FAST_CODE void fixed_vqf_update_gyr(fixed_vqf_t *s, const q24_t gyr_rads_q24[3])
 {
     static const q30_t b[3]={REST_B0_Q30,REST_B1_Q30,REST_B2_Q30};
     static const q30_t a[2]={REST_A1_Q30,REST_A2_Q30};
@@ -438,9 +438,15 @@ FAST_CODE void fixed_vqf_update_gyr(fixed_vqf_t *s, const q24_t gyr[3])
     int64_t dev2=0;
     uint32_t i;
 
-    filter_vec_q24(s,gyr,3U,b,a,s->rest_gyr_state_q54,s->rest_last_gyr_q24,FLAG_REST_GYR_INIT);
+    filter_vec_q24(s,gyr_rads_q24,3U,b,a,s->rest_gyr_state_q54,s->rest_last_gyr_q24,FLAG_REST_GYR_INIT);
     for (i=0U; i<3U; ++i) {
-        int64_t d=(int64_t)gyr[i]-s->rest_last_gyr_q24[i];
+        int64_t d=(int64_t)gyr_rads_q24[i]-s->rest_last_gyr_q24[i];
+        /* Only the threshold comparison matters. Bound each difference
+         * before squaring, including an INT32_MIN/MAX input transition. */
+        if (d >= REST_GYR_TH_Q24 || d <= -REST_GYR_TH_Q24) {
+            dev2 = (int64_t)REST_GYR_TH_Q24 * REST_GYR_TH_Q24;
+            break;
+        }
         dev2 += d*d;
     }
     if (dev2 >= (int64_t)REST_GYR_TH_Q24*REST_GYR_TH_Q24 ||
@@ -455,7 +461,7 @@ FAST_CODE void fixed_vqf_update_gyr(fixed_vqf_t *s, const q24_t gyr[3])
         /* Rest detection is only for bias estimation.  Keep the internal
          * quaternion integration continuous; output-layer yaw hold, when
          * explicitly enabled, must not alter VQF state. */
-        w_q32[i] = (int64_t)gyr[i] * 256LL - s->gyro_bias_q32[i];
+        w_q32[i] = (int64_t)gyr_rads_q24[i] * 256LL - s->gyro_bias_q32[i];
     }
     /* h = omega*Ts/2. Taylor terms below match sin/cos through fourth order. */
     for (i=0U; i<3U; ++i) h[i]=sat32(round_shift_s64(w_q32[i]*GYR_HALF_DT_Q30,32U));
@@ -473,7 +479,7 @@ FAST_CODE void fixed_vqf_update_gyr(fixed_vqf_t *s, const q24_t gyr[3])
     (void)normalize_q30(s->gyr_q,4U);
 }
 
-FAST_CODE void fixed_vqf_update_acc(fixed_vqf_t *s, const q30_t acc[3])
+FAST_CODE void fixed_vqf_update_acc(fixed_vqf_t *s, const q30_t acc_g_q30[3])
 {
     static const q30_t rb[3]={REST_B0_Q30,REST_B1_Q30,REST_B2_Q30};
     static const q30_t ra[2]={REST_A1_Q30,REST_A2_Q30};
@@ -493,11 +499,11 @@ FAST_CODE void fixed_vqf_update_acc(fixed_vqf_t *s, const q30_t acc[3])
     int64_t adev2=0;
     uint32_t i;
 
-    if ((acc[0]|acc[1]|acc[2])==0) return;
+    if ((acc_g_q30[0]|acc_g_q30[1]|acc_g_q30[2])==0) return;
 
-    filter_vec_q30(s,acc,3U,rb,ra,s->rest_acc_state_q60,s->rest_last_acc_q30,FLAG_REST_ACC_INIT);
+    filter_vec_q30(s,acc_g_q30,3U,rb,ra,s->rest_acc_state_q60,s->rest_last_acc_q30,FLAG_REST_ACC_INIT);
     for (i=0U; i<3U; ++i) {
-        int64_t d=(int64_t)acc[i]-s->rest_last_acc_q30[i];
+        int64_t d=(int64_t)acc_g_q30[i]-s->rest_last_acc_q30[i];
         uint64_t ad = (uint64_t)(d < 0 ? -d : d);
         uint64_t limit = (uint64_t)REST_ACC_TH_Q30;
         if (ad >= limit) {
@@ -514,7 +520,7 @@ FAST_CODE void fixed_vqf_update_acc(fixed_vqf_t *s, const q30_t acc[3])
         if (s->rest_count >= REST_MIN_SAMPLES) s->flags |= FLAG_REST;
     }
 
-    quat_rotate(s->gyr_q,acc,accEarth);
+    quat_rotate(s->gyr_q,acc_g_q30,accEarth);
     filter_vec_q30(s,accEarth,3U,ab,aa,s->acc_lp_state_q60,s->last_acc_lp_q30,FLAG_ACC_LP_INIT);
     quat_rotate(s->acc_q,s->last_acc_lp_q30,accEarth);
     if (!normalize_q30(accEarth,3U)) { fixed_vqf_acc_reject_count++; return; }
@@ -524,9 +530,9 @@ FAST_CODE void fixed_vqf_update_acc(fixed_vqf_t *s, const q30_t acc[3])
     if (accEarth[2] < -Q30_ONE+1024) {
         corr[0]=0; corr[1]=Q30_ONE; corr[2]=0; corr[3]=0;
     } else {
-        corr[0]=(Q30_ONE>>1)+(accEarth[2]>>1);
-        corr[1]=accEarth[1]>>1;
-        corr[2]=-(accEarth[0]>>1);
+        corr[0]=(Q30_ONE>>1)+imu_asr32(accEarth[2],1U);
+        corr[1]=imu_asr32(accEarth[1],1U);
+        corr[2]=-imu_asr32(accEarth[0],1U);
         corr[3]=0;
         if (!normalize_q30(corr,4U)) { fixed_vqf_acc_reject_count++; return; }
     }
