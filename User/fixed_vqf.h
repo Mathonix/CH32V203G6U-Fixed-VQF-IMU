@@ -16,7 +16,11 @@
 #define LSM6DSV_ACCEL_FS_4G     0U /* 0: +/-2 g,    1: +/-4 g */
 #endif
 
-/* Both motion and rest gyro-bias estimators are enabled. */
+/* Fixed VQF Balanced tune at FIXED_VQF_SAMPLE_HZ.
+ * tauAcc 2.5 s, restFilterTau 0.5 s, restMinT 1.0 s,
+ * restThGyr 0.6 deg/s, restThAcc 0.15 m/s^2,
+ * biasSigmaInit 0.5, biasSigmaMotion 0.1, biasSigmaRest 0.03 deg/s,
+ * biasClip 2 deg/s, biasForgettingTime 100 s, verticalForgetting 0.0001. */
 #define FIXED_VQF_MOTION_BIAS_ENABLED 1U
 #define FIXED_VQF_REST_BIAS_ENABLED   1U
 #define FIXED_VQF_BIAS_SIGMA_REST_DPS 0.03f

@@ -22,7 +22,7 @@
 - 无磁力计，因此 yaw 没有绝对航向参考
 - PA9 呼吸灯
 - CAN 1 Mbps
-- UART2 921600 baud，VOFA JustFloat 输出
+- UART2 2000000 baud，VOFA JustFloat 九通道输出
 - WCH-Link 烧录和 GDB 运行诊断变量
 - CPU 负载、采样丢失、CAN/UART 发送计数等运行时诊断
 
@@ -69,7 +69,7 @@ UART 转换器必须连接到 **PA2**，不能将 WCH-Link 调试串口或其他
 配置位于 `User/main.c`：
 
 ```c
-#define UART_BAUD_RATE          921600U
+#define UART_BAUD_RATE          2000000U
 #define OUTPUT_RATE_HZ          1000U
 #define CAN_GYRO_PERIOD_MS      1U
 #define CAN_ACCEL_PERIOD_MS     1U
@@ -132,30 +132,36 @@ CAN 欧拉角输出采用达妙 IMU 主动输出风格的兼容布局，当前�
 UART 使用 USART2：
 
 ```text
-波特率：921600
+波特率：2000000
 数据位：8
 停止位：1
 校验：无
 ```
 
-每帧 16 字节：
+每帧 40 字节，九个 float32 小端通道，顺序为 yaw、pitch、roll、ax、ay、az、gx、gy、gz：
 
 | 偏移 | 内容 |
 |---:|---|
-| 0 | roll，float32，小端 |
-| 4 | pitch，float32，小端 |
-| 8 | yaw，float32，小端 |
-| 12 | VOFA JustFloat 帧尾 `00 00 80 7F` |
+| 0 | yaw，度 |
+| 4 | pitch，度 |
+| 8 | roll，度 |
+| 12 | ax，g，传感器原始值 |
+| 16 | ay，g，传感器原始值 |
+| 20 | az，g，传感器原始值 |
+| 24 | gx，deg/s，传感器原始值 |
+| 28 | gy，deg/s，传感器原始值 |
+| 32 | gz，deg/s，传感器原始值 |
+| 36 | VOFA JustFloat 帧尾 `00 00 80 7F` |
 
-有效输出频率为 1 kHz。VOFA 配置为 JustFloat，并选择正确的 COM 口。
+加速度和角速度是本帧送入融合前的原始样本，不是 bias 校正后的内部状态。有效输出频率为 1 kHz。VOFA 配置为 JustFloat，通道数为 9，并选择正确的 COM 口。
 
 如果 UART 计数持续增加但 VOFA 没有数据，应优先检查：
 
 1. USB-UART 是否接到 PA2；
 2. COM 口是否选择正确；
-3. 波特率是否为 921600；
+3. 波特率是否为 2000000；
 4. 电平是否为 3.3 V TTL；
-5. PA2 是否存在 921600 波形；
+5. PA2 是否存在 2000000 波形；
 6. VOFA 帧尾是否配置为 `00 00 80 7F`。
 
 ## 编译
@@ -311,6 +317,6 @@ CH32V203G6U/
 
 - 无磁力计，无法提供绝对 yaw；
 - CAN 端欧拉角仍为 0.01° 兼容分辨率；
-- 921600 baud 下的 UART 输出依赖正确的 TTL 电气连接；
+- 2000000 baud 下的 UART 输出依赖正确的 TTL 电气连接；
 - 2 kHz 采样和定点 VQF 的 CPU 占用会随 bias estimator、滤波和输出配置变化；
 - 任何硬件改动后都应重新执行 LSM6DSV、CAN、UART 和静置漂移测试。

@@ -10,25 +10,30 @@
 #define Q20_ONE                 ((int64_t)1048576)
 #define ABS32U(x)               ((uint32_t)((x) < 0 ? -(int64_t)(x) : (x)))
 
-/* Full VQF default coefficients. Coefficients are Q1.30 and the filter
- * states keep all 30 product fractional bits. Time constants remain 0.5 s
- * for rest detection and 3 s for the accelerometer inclination filter. */
+/* Fixed VQF Balanced tune. Coefficients are Q1.30 and the filter states
+ * keep all 30 product fractional bits.
+ *   tauAcc 2.5 s, restFilterTau 0.5 s, restMinT 1.0 s
+ *   restThGyr 0.6 deg/s, restThAcc 0.15 m/s^2, biasClip 2.0 deg/s
+ *   biasSigmaInit 0.5, biasSigmaMotion 0.1, biasSigmaRest 0.03 deg/s
+ *   biasForgettingTime 100 s, verticalForgetting 0.0001
+ * Biquad values are the double-precision Butterworth coefficients used by
+ * VQF, rounded to Q1.30. */
 #if FIXED_VQF_SAMPLE_HZ == 2000U
 #define REST_B0_Q30             ((q30_t)536)
 #define REST_B1_Q30             ((q30_t)1073)
 #define REST_B2_Q30             ((q30_t)536)
 #define REST_A1_Q30             ((q30_t)-2145336165)
 #define REST_A2_Q30             ((q30_t)1071596486)
-#define ACC_B0_Q30              ((q30_t)15)
-#define ACC_B1_Q30              ((q30_t)30)
-#define ACC_B2_Q30              ((q30_t)15)
-#define ACC_A1_Q30              ((q30_t)-2147125734)
-#define ACC_A2_Q30              ((q30_t)1073383970)
-#define REST_MIN_SAMPLES        ((uint16_t)3000)     /* 1.5 s at 2 kHz */
+#define ACC_B0_Q30              ((q30_t)21)
+#define ACC_B1_Q30              ((q30_t)43)
+#define ACC_B2_Q30              ((q30_t)21)
+#define ACC_A1_Q30              ((q30_t)-2147054151)
+#define ACC_A2_Q30              ((q30_t)1073312413)
+#define REST_MIN_SAMPLES        ((uint16_t)2000)     /* 1.0 s at 2 kHz */
 #define BIAS_V_Q20              ((int64_t)524)       /* 0.0005 covariance unit/sample */
 #define BIAS_W_MOTION_Q20       ((int64_t)21076377600LL)
 #define BIAS_W_VERTICAL_Q20     ((int64_t)210763776000000LL)
-#define BIAS_W_REST_Q20         ((int64_t)169878749184LL) /* sigmaRest=0.03 dps, same as float VQF */
+#define BIAS_W_REST_Q20         ((int64_t)169878749184LL) /* sigmaRest=0.03 dps */
 #define GYR_HALF_DT_Q30         ((int64_t)268435)    /* (0.5 ms / 2) in Q30 */
 #define MOTION_ACC_RATE_Q32     ((int64_t)8000)     /* 1/Ts, Q30 -> Q32 */
 #elif FIXED_VQF_SAMPLE_HZ == 1000U
@@ -37,27 +42,27 @@
 #define REST_B2_Q30             ((q30_t)2143)
 #define REST_A1_Q30             ((q30_t)-2143188686)
 #define REST_A2_Q30             ((q30_t)1069455435)
-#define ACC_B0_Q30              ((q30_t)60)
-#define ACC_B1_Q30              ((q30_t)119)
-#define ACC_B2_Q30              ((q30_t)60)
-#define ACC_A1_Q30              ((q30_t)-2146767820)
-#define ACC_A2_Q30              ((q30_t)1073026235)
-#define REST_MIN_SAMPLES        ((uint16_t)1500)     /* 1.5 s at 1 kHz */
+#define ACC_B0_Q30              ((q30_t)86)
+#define ACC_B1_Q30              ((q30_t)172)
+#define ACC_B2_Q30              ((q30_t)86)
+#define ACC_A1_Q30              ((q30_t)-2146624655)
+#define ACC_A2_Q30              ((q30_t)1072883174)
+#define REST_MIN_SAMPLES        ((uint16_t)1000)     /* 1.0 s at 1 kHz */
 #define BIAS_V_Q20              ((int64_t)1049)      /* 0.001 covariance unit/sample */
 #define BIAS_W_MOTION_Q20       ((int64_t)10590617600LL)
 #define BIAS_W_VERTICAL_Q20     ((int64_t)105906176000000LL)
-#define BIAS_W_REST_Q20         ((int64_t)84939374592LL)  /* sigmaRest=0.03 dps, same as float VQF */
+#define BIAS_W_REST_Q20         ((int64_t)84939374592LL)  /* sigmaRest=0.03 dps */
 #define GYR_HALF_DT_Q30         ((int64_t)536871)    /* (1 ms / 2) in Q30 */
 #define MOTION_ACC_RATE_Q32     ((int64_t)4000)     /* 1/Ts, Q30 -> Q32 */
 #else
 #error "FIXED_VQF_SAMPLE_HZ must be 1000 or 2000"
 #endif
 
-/* Full VQF defaults, converted to the formats documented in fixed_vqf.h. */
+/* Balanced tune, converted to the formats documented in fixed_vqf.h. */
 #define BIAS_CLIP_Q24           ((q24_t)585635)      /* 2 deg/s */
 #define BIAS_CLIP_Q32           ((int64_t)149922641LL) /* 2 deg/s */
-#define REST_GYR_TH_Q24         ((q24_t)585635)      /* 2 deg/s */
-#define REST_ACC_TH_Q30         ((q30_t)54745597)    /* 0.5 m/s^2 in g */
+#define REST_GYR_TH_Q24         ((q24_t)175691)      /* 0.6 deg/s */
+#define REST_ACC_TH_Q30         ((q30_t)16423679)    /* 0.15 m/s^2 in g */
 #define BIAS_P0_Q20             ((int64_t)2621440000LL)
 #define BIAS_P_FLOOR_Q20       ((int64_t)1048576LL) /* retain 1.0 covariance for continued rest bias tracking */
 

@@ -64,7 +64,7 @@
 #define CAN_GYRO_PERIOD_MS      1U
 #define CAN_ACCEL_PERIOD_MS     1U
 #define CAN_EULER_PERIOD_MS     1U
-#define UART_BAUD_RATE          921600U
+#define UART_BAUD_RATE          2000000U /* Exact at PCLK1 = 72 MHz (divider 2.25). */
 #define YAW_TEST_SETTLE_SAMPLES (20U * FIXED_VQF_SAMPLE_HZ)
 #define YAW_TEST_END_SAMPLES    (80U * FIXED_VQF_SAMPLE_HZ)
 #define OUTPUT_RATE_HZ          1000U
@@ -145,7 +145,8 @@ static fixed_vqf_t fixed_vqf;
 static int64_t gyro_lpf_state_q54[6] = {0};
 static uint8_t gyro_lpf_initialized = 0U;
 volatile q24_t vqf_gyro_filtered_q24[3] = {0, 0, 0};
-static uint8_t uart2_tx_dma_buffer[16];
+/* yaw pitch roll ax ay az gx gy gz, plus the 4-byte JustFloat tail. */
+static uint8_t uart2_tx_dma_buffer[40];
 static uint8_t can_mailbox_active[3] = {0U, 0U, 0U};
 static uint8_t can_initialized = 0U;
 extern void TIM2_IRQHandler(void);
@@ -160,21 +161,36 @@ volatile uint16_t cpu_busy_samples = 0U;
 
 
 
+/* Startup writes mstatus = 0x88 and mret's into main, so main runs in User
+ * mode. mstatus is illegal there. CSR 0x800 is the QingKe gintenr mirror of
+ * MIE/MPIE and is the register WCH's __enable_irq/__disable_irq use. */
+static inline uint32_t IrqSaveClearMie(void)
+{
+    uint32_t status;
+    __asm volatile ("csrrc %0, 0x800, %1"
+                    : "=r"(status) : "r"(0x8U) : "memory");
+    return status;
+}
+
+static inline void IrqRestoreMie(uint32_t status)
+{
+    if((status & 0x8U) != 0U)
+        __asm volatile ("csrs 0x800, %0" :: "r"(0x8U) : "memory");
+}
+
 static uint32_t VQF_TimeUs(void)
 {
     uint32_t irq_status, ticks, counter;
     /* Keep this critical section shorter than one TIM2 period. Account for
      * an update that occurred before its ISR could increment the tick. */
-    __asm volatile ("csrrc %0, mstatus, %1"
-                    : "=r"(irq_status) : "r"(0x8U) : "memory");
+    irq_status = IrqSaveClearMie();
     ticks = vqf_timer_ticks;
     counter = TIM2->CNT;
     if((TIM2->INTFR & TIM_IT_Update) != 0U) {
         ticks++;
         counter = TIM2->CNT;
     }
-    if((irq_status & 0x8U) != 0U)
-        __asm volatile ("csrs mstatus, %0" :: "r"(0x8U) : "memory");
+    IrqRestoreMie(irq_status);
     return ticks * VQF_PERIOD_US + counter;
 }
 
@@ -241,7 +257,7 @@ SLOW_CODE static void CAN1_Init_1M(void)
     if(can_initialized == 0U) can_error_status = 0xE0U;
 }
 
-SLOW_CODE static void UART2_Init_921600(void)
+SLOW_CODE static void UART2_Init(void)
 {
     GPIO_InitTypeDef gpio = {0};
     USART_InitTypeDef uart = {0};
@@ -263,9 +279,9 @@ SLOW_CODE static void UART2_Init_921600(void)
     USART_Init(USART2, &uart);
     USART_Cmd(USART2, ENABLE);
 
-    /* DMA1 channel 7 is USART2_TX. The 16-byte JustFloat frame then costs
-     * only a short memory fill in the 500 us fusion slot instead of ~174 us
-     * of polling at 921600 baud. */
+    /* DMA1 channel 7 is USART2_TX. The 40-byte JustFloat frame is only a
+     * memory fill in the fusion slot. At 2 Mbit/s the wire time is 200 us,
+     * inside the 1 ms output period. */
     {
         DMA_InitTypeDef dma = {0};
         RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
@@ -732,7 +748,25 @@ static void UART2_PackFloatLE(uint8_t *dst, float value)
     dst[3] = data.b[3];
 }
 
-static void UART2_SendEulerJustFloat(void)
+static float UART2_AccelG(int16_t raw)
+{
+#if LSM6DSV_ACCEL_FS_4G
+    return (float)raw * (1.0f / 8192.0f);   /* +/-4 g, 8192 LSB/g */
+#else
+    return (float)raw * (1.0f / 16384.0f);  /* +/-2 g, 16384 LSB/g */
+#endif
+}
+
+static float UART2_GyroDps(int16_t raw)
+{
+#if LSM6DSV_GYRO_FS_2000DPS
+    return (float)raw * 0.070f;             /* +/-2000 dps */
+#else
+    return (float)raw * 0.004375f;          /* +/-125 dps */
+#endif
+}
+
+static void UART2_SendJustFloat(void)
 {
     if(DMA_GetCurrDataCounter(DMA1_Channel7) != 0U)
     {
@@ -740,13 +774,21 @@ static void UART2_SendEulerJustFloat(void)
         return;
     }
 
-    UART2_PackFloatLE(&uart2_tx_dma_buffer[0], (float)vqf_euler_q16[0] / 65536.0f);
+    /* Channel order: yaw, pitch, roll (deg), ax, ay, az (g), gx, gy, gz (deg/s).
+     * Accel and gyro are the raw sensor samples, not the bias-corrected state. */
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[0], (float)vqf_euler_q16[2] / 65536.0f);
     UART2_PackFloatLE(&uart2_tx_dma_buffer[4], (float)vqf_euler_q16[1] / 65536.0f);
-    UART2_PackFloatLE(&uart2_tx_dma_buffer[8], (float)vqf_euler_q16[2] / 65536.0f);
-    uart2_tx_dma_buffer[12] = 0x00U;
-    uart2_tx_dma_buffer[13] = 0x00U;
-    uart2_tx_dma_buffer[14] = 0x80U;
-    uart2_tx_dma_buffer[15] = 0x7FU;
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[8], (float)vqf_euler_q16[0] / 65536.0f);
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[12], UART2_AccelG(lsm_accel_x));
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[16], UART2_AccelG(lsm_accel_y));
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[20], UART2_AccelG(lsm_accel_z));
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[24], UART2_GyroDps(lsm_gyro_x));
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[28], UART2_GyroDps(lsm_gyro_y));
+    UART2_PackFloatLE(&uart2_tx_dma_buffer[32], UART2_GyroDps(lsm_gyro_z));
+    uart2_tx_dma_buffer[36] = 0x00U;
+    uart2_tx_dma_buffer[37] = 0x00U;
+    uart2_tx_dma_buffer[38] = 0x80U;
+    uart2_tx_dma_buffer[39] = 0x7FU;
 
     DMA_Cmd(DMA1_Channel7, DISABLE);
     DMA_ClearFlag(DMA1_FLAG_GL7);
@@ -1005,7 +1047,7 @@ int main(void)
     LSM6DSV_SPI_Init();
     LSM6DSV_Test();
     CAN1_Init_1M();
-    UART2_Init_921600();
+    UART2_Init();
     fixed_vqf_init(&fixed_vqf);
     VQF_SampleTimer_Init();
 
@@ -1016,12 +1058,10 @@ int main(void)
             /* TIM2 supplies the fixed VQF cadence (0.5 ms at default 2 kHz). */
             if(vqf_sample_pending == 0U) continue;
             /* Atomic disable-and-save of MIE; only restore it if already set. */
-            __asm volatile ("csrrc %0, mstatus, %1"
-                            : "=r"(irq_status) : "r"(0x8U) : "memory");
+            irq_status = IrqSaveClearMie();
             sample_result = vqf_sample_pending;
             vqf_sample_pending = 0U;
-            if((irq_status & 0x8U) != 0U)
-                __asm volatile ("csrs mstatus, %0" :: "r"(0x8U) : "memory");
+            IrqRestoreMie(irq_status);
             if(sample_result == 0U) continue;
             cpu_start_us = VQF_TimeUs();
 
@@ -1057,7 +1097,7 @@ int main(void)
             if(output_due != 0U)
             {
                 CAN1_Service(1U);
-                UART2_SendEulerJustFloat();
+                UART2_SendJustFloat();
                 TIM_SetCompare2(TIM1, brightness);
                 if((step > 0) && (brightness >= (BREATH_PWM_PERIOD - 2U)))
                 {

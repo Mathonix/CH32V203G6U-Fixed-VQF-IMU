@@ -105,7 +105,7 @@ static vqf_state_t state;
 
 SLOW_CODE static void init_params(void)
 {
-    params.tauAcc = 3.0f;
+    params.tauAcc = 2.5f;
     params.tauMag = 9.0f;
     /* RV32IMAC has no FPU: keep the rest bias estimator, but disable the
      * expensive 3x3 motion-bias Kalman update so the 1 kHz deadline is met. */
@@ -118,10 +118,10 @@ SLOW_CODE static void init_params(void)
     params.biasSigmaMotion = 0.1f;
     params.biasVerticalForgettingFactor = 0.0001f;
     params.biasSigmaRest = 0.03f;
-    params.restMinT = 1.5f;
+    params.restMinT = 1.0f;
     params.restFilterTau = 0.5f;
-    params.restThGyr = 2.0f;
-    params.restThAcc = 0.5f;
+    params.restThGyr = 0.6f;
+    params.restThAcc = 0.15f;
     params.magCurrentTau = 0.05f;
     params.magRefTau = 20.0f;
     params.magNormTh = 0.1f;
