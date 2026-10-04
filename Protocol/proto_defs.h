@@ -1,0 +1,59 @@
+#pragma once
+#include <stdint.h>
+#include <stdbool.h>
+/* AT32F423_LSM6DSV @156968d5 wire contract. */
+#define PROTO_MAX_PAYLOAD 64U
+#define PROTO_MAX_FRAME 71U
+#define MSG_EULER 0x01U
+#define MSG_QUATERNION 0x02U
+#define MSG_IMU 0x03U
+#define MSG_COMPACT 0x04U
+#define MSG_SYSTEM_INFO 0x05U
+#define MSG_SELECTED_DATA 0x06U
+#define MSG_DEVICE_CONFIG 0x07U
+#define MSG_ACC_CAL 0x0AU
+#define MSG_FILTER_CONFIG 0x0BU
+#define MSG_FIRMWARE_INFO 0x32U
+#define MSG_ACK 0x90U
+#define CMD_PING 0x10U
+#define CMD_ZERO_YAW 0x11U
+#define CMD_RECALIBRATE_GYRO 0x12U
+#define CMD_SET_STREAM_MODE 0x13U
+#define CMD_QUERY_STATUS 0x14U
+#define CMD_SYSTEM_RESET 0x15U
+#define CMD_ENTER_BOOTLOADER 0x16U
+#define CMD_ENTER_SETTINGS 0x17U
+#define CMD_EXIT_SETTINGS 0x18U
+#define CMD_SET_FUSION_MODE 0x19U
+#define CMD_START_GYRO_CAL 0x1BU
+#define CMD_START_ACC_CAL 0x1CU
+#define CMD_SET_OUTPUT_HZ 0x1DU
+#define CMD_SET_STARTUP_CONFIG 0x1EU
+#define CMD_QUERY_CONFIG 0x1FU
+#define CMD_SET_OUTPUT_CONFIG 0x20U
+#define CMD_QUERY_CAN_CONFIG 0x21U
+#define CMD_SET_CAN_CONFIG 0x22U
+#define CMD_QUERY_FIRMWARE_INFO 0x23U
+#define CMD_QUERY_ACC_CAL 0x24U
+#define CMD_CANCEL_ACC_CAL 0x25U
+#define CMD_QUERY_FILTER 0x26U
+#define CMD_SET_FILTER 0x27U
+/* CH32 OTA staging extension (not in the AT32 contract); see Boot/ota_layout.h. */
+#define CMD_OTA_BEGIN 0x40U
+#define CMD_OTA_WRITE 0x41U
+#define CMD_OTA_END 0x42U
+#define CMD_OTA_COMMIT 0x43U
+#define CMD_OTA_ABORT 0x44U
+#define OTA_PROTOCOL_VERSION 1U
+#define ACK_SUCCESS 0U
+#define ACK_UNKNOWN_CMD 1U
+#define ACK_INVALID_PARAM 2U
+#define ACK_EXEC_FAILED 3U
+#define FORMAT_JUSTFLOAT 0U
+#define FORMAT_CUSTOM 1U
+#define FORMAT_LEGACY 2U
+#define FIELDS_ALL 0x01FFU
+#define FLAG_REST_DETECTED 1U
+#define FLAG_CALIB_DONE 8U
+#define FLAG_SENSOR_ERROR 16U
+typedef struct { uint8_t format,legacy_mode; uint16_t mask; } output_config_t;

@@ -1,0 +1,17 @@
+#pragma once
+/* Same thresholds as the pinned AT32 six-face reference. */
+#define APP_ACC_CAL_FACE_SECONDS 1.0f
+#define APP_ACC_CAL_FACE_TIMEOUT_S 60.0f
+#define APP_ACC_CAL_GYR_REST_DPS 2.0f
+#define APP_ACC_CAL_NORM_TOL_G 0.15f
+#define APP_ACC_CAL_DOMINANT_MIN_G 0.75f
+#define APP_ACC_CAL_OTHER_MAX_G 0.20f
+#define APP_ACC_CAL_STABLE_MS 500U
+#define APP_ACC_CAL_MAX_SAMPLE_GAP_MS 20U
+#define APP_ACC_CAL_MAX_STDDEV_G 0.015f
+#define APP_ACC_CAL_MAX_STEP_G 0.025f
+#define APP_ACC_CAL_MAX_BIAS_G 0.15f
+#define APP_ACC_CAL_MIN_SCALE 0.85f
+#define APP_ACC_CAL_MAX_SCALE 1.15f
+#define APP_ACC_CAL_MAX_TILT_G 0.50f
+#define APP_ACC_CAL_MAX_NORM_ERR_G 0.001f
