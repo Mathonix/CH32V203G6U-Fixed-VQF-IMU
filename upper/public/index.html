@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CH32 AHRS · UART 上位机</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<!-- 图标：Lucide（ISC License），与 AT32 gyro 同一套 -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+  <symbol id="i-cable" viewBox="0 0 24 24"><path d="M17 21v-2a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1"/><path d="M19 15V6.5a1 1 0 0 0-7 0v11a1 1 0 0 1-7 0V9"/><path d="M21 21v-2h-4"/><path d="M3 5h4V3"/><path d="M7 5a1 1 0 0 1 1 1v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1V3"/></symbol>
+  <symbol id="i-crosshair" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+  <symbol id="i-thermometer" viewBox="0 0 24 24"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+</svg>
+<div class="app">
+  <nav class="nav" aria-label="页面">
+    <div class="nav-mark" aria-hidden="true"><svg class="ic"><use href="#i-crosshair"/></svg><b>AHRS</b></div>
+    <a class="nav-item" href="#/status" data-nav="status"><svg class="ic"><use href="#i-gauge"/></svg><span>状态</span></a>
+    <a class="nav-item" href="#/output" data-nav="output"><svg class="ic"><use href="#i-cable"/></svg><span>输出</span></a>
+    <a class="nav-item" href="#/calib" data-nav="calib"><svg class="ic"><use href="#i-crosshair"/></svg><span>校准</span></a>
+    <a class="nav-item" href="#/diag" data-nav="diag"><svg class="ic"><use href="#i-activity"/></svg><span>诊断</span></a>
+    <div class="nav-fill"></div>
+    <a class="nav-item" href="#/settings" data-nav="settings"><svg class="ic"><use href="#i-settings"/></svg><span>设置</span></a>
+  </nav>
+  <div class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <span class="tb-title">CH32 AHRS</span>
+        <span class="conn" id="connChip" data-state="off" title="串口连接状态"><i class="dot"></i><span id="connState">DISCONNECTED</span></span>
+        <span class="pill" id="liveBadge">OFFLINE</span>
+      </div>
+      <div class="tb-right">
+        <button class="primary" id="btnConnect"><svg class="ic sm"><use href="#i-plug"/></svg>连接设备</button>
+        <button id="btnDisconnect" disabled>断开</button>
+        <a class="icon-btn" href="#/settings" title="设置" aria-label="设置"><svg class="ic"><use href="#i-settings"/></svg></a>
+      </div>
+    </header>
+    <div class="serial-notice" id="serialNotice" role="note" hidden>手机浏览器不支持 Web Serial，可使用 Mock 演示或在电脑 Chrome/Edge 中连接<a id="serialNoticeMock" href="?mock=1">打开 Mock 演示</a></div>
+    <div class="mock-note" id="mockNote" role="note"></div>
+    <main class="views">
+
+      <!-- ========== 状态 ========== -->
+      <section class="view view-status" data-view="status" hidden>
+        <header class="page-h"><h1>设备状态</h1><span class="chip" id="sData">无数据</span><span class="chip warn" id="staleBadge" hidden>数据过期</span><span class="chip on" id="relZero" hidden>相对零点</span></header>
+        <section class="card attitude-strip">
+            <div class="ypr-row">
+              <div class="ypr">
+                <div class="ypr-item"><span title="六轴 VQF 无磁力计：相对航向，会漂移，不是磁北">Yaw</span><strong id="yaw">—</strong></div>
+                <div class="ypr-item"><span>Pitch</span><strong id="pitch">—</strong></div>
+                <div class="ypr-item"><span>Roll</span><strong id="roll">—</strong></div>
+              </div>
+              <button id="btnZeroYaw" disabled title="0x11：当前航向设为 0（相对零点）"><svg class="ic sm"><use href="#i-rotate"/></svg>Yaw 归零</button>
+            </div>
+        </section>
+        <div class="two-col">
+          <section class="card main-card">
+            <div class="card-h"><h2>实时曲线</h2></div>
+            <div class="chart-h">
+              <div class="seg" role="tablist">
+                <button class="tab active" data-tab="attitude">姿态</button><button class="tab" data-tab="gyro">角速度</button><button class="tab" data-tab="accel">加速度</button>
+              </div>
+              <div class="chart-opts">
+                <select id="selAccUnit" title="加速度显示单位（设备输出 m/s²）"><option value="ms2" selected>m/s²</option><option value="g">g</option></select>
+                <select id="selWindow" title="时间窗口"><option value="5000">5 s</option><option value="10000" selected>10 s</option></select>
+              </div>
+            </div>
+            <div class="plot-box"><canvas id="plot"></canvas></div>
+            <div class="sr-only" id="plotVals"></div>
+          </section>
+          <section class="card side-card">
+            <div class="card-h"><h2>板卡姿态</h2></div>
+            <div class="stage" id="stage" title="机体轴：红 X / 绿 Y / 蓝 Z · 拖动旋转视角，滚轮 / 双指缩放">
+              <div class="horizon" aria-hidden="true"><div class="sky" id="horizon"></div><div class="reticle"></div></div>
+              <button id="modelReset" class="sm stage-reset" hidden title="恢复默认查看角度"><svg class="ic sm"><use href="#i-rotate"/></svg>复位</button>
+            </div>
+            <div class="rows">
+              <div class="row"><span class="k">温度</span><span class="v" id="sTemp">—</span></div>
+              <div class="row"><span class="k">实收</span><span class="v" id="rxRate">—</span></div>
+              <div class="row"><span class="k" title="当前 / 已保存">频率</span><span class="v" id="hzPair">—</span></div>
+              <div class="row"><span class="k">输出</span><span class="v" id="streamMode">—</span></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ========== 输出 ========== -->
+      <section class="view view-output" data-view="output" hidden>
+        <header class="page-h"><h1>数据输出</h1><span class="chip" id="outState">等待读取</span></header>
+        <section class="card form-card single output-form">
+          <label class="field field-proto">协议<select id="selProto" disabled title="0x20 format：Custom（AA55 + CRC）/ JustFloat；旧预设走 0x13（仅 RAM）"></select></label>
+          <label class="field field-narrow">输出频率<span class="suffix"><input id="inpHz" type="number" inputmode="numeric" min="1" max="2000" step="1" list="hzList" disabled title="0x1D：改变频率总是写入 Flash"><i>Hz</i></span></label>
+          <fieldset class="field" id="outFieldset">
+            <div class="field-h"><span>输出内容</span><span class="links"><button type="button" id="btnAll" class="link">全选</button><button type="button" id="btnNone" class="link">清空</button></span></div>
+            <div class="checks" id="maskBits">
+              <details class="more" id="maskMoreBox"><summary>更多选项 ›</summary><div class="more-grid" id="maskMore"></div></details>
+            </div>
+          </fieldset>
+          <label class="switch-row" title="persist=1：同时写入 Flash，重启后保留（旧预设仅 RAM）"><span>断电保存</span><input type="checkbox" class="switch" id="outPersist"></label>
+          <datalist id="hzList"></datalist>
+          <div class="msg" id="outMsg"></div>
+          <div class="actions">
+            <details class="disclosure" id="outDetails"><summary>设备当前配置<svg class="ic xs"><use href="#i-chevron"/></svg></summary>
+              <div class="kv-rows">
+                <div class="row"><span class="k">格式</span><span class="v" id="outFormat">—</span></div>
+                <div class="row"><span class="k">mask</span><span class="v" id="outMask">—</span></div>
+                <div class="row"><span class="k">字段</span><span class="v" id="outFields">—</span></div>
+                <div class="row"><span class="k" title="当前 / 已保存">频率</span><span class="v" id="outHz">—</span></div>
+              </div>
+              <div class="sub-actions">
+                <button id="btnPause" disabled title="0x20 mask=0 persist=0：暂停遥测，命令仍可用">暂停遥测</button>
+                <button id="btnVofa" disabled title="ASCII vofa：切 RAM JustFloat，保留 mask，无 ACK">发送 vofa</button>
+              </div>
+            </details>
+            <span class="fill"></span>
+            <button id="btnApply" class="primary" disabled title="按所选协议 / 内容 / 断电保存下发 0x20（旧预设 0x13）；频率有改动时再发 0x1D">应用</button>
+          </div>
+        </section>
+      </section>
+
+      <!-- ========== 校准 ========== -->
+      <section class="view view-calib" data-view="calib" hidden>
+        <header class="page-h"><h1>六面校准</h1><span class="pill" id="calState">—</span></header>
+        <section class="card form-card single cal" id="calCard">
+          <div class="calfaces" id="calFaces"></div>
+          <div class="cal-phase"><b id="calPhase">—</b></div>
+          <div class="progress-row"><span class="pr-k">当前面</span><div class="bar"><div id="calFaceBar"></div></div><span class="num" id="calFacePct">—</span></div>
+          <div class="progress-row"><span class="pr-k">总进度</span><div class="bar"><div id="calAllBar"></div></div><span class="num" id="calAllPct">—</span></div>
+          <div class="msg" id="calMsg"></div>
+          <div class="calres" id="calResult" hidden></div>
+          <div class="actions">
+            <details class="disclosure" id="calDetails"><summary>详情<svg class="ic xs"><use href="#i-chevron"/></svg></summary>
+              <div class="kv-rows">
+                <div class="row"><span class="k">当前面</span><span class="v" id="calFace">—</span></div>
+                <div class="row"><span class="k">样本</span><span class="v" id="calSamples">—</span></div>
+                <div class="row"><span class="k">原始 g</span><span class="v" id="calRaw">—</span></div>
+                <div class="row"><span class="k">错误码</span><span class="v" id="calErr">—</span></div>
+                <div class="row"><span class="k">已保存</span><span class="v" id="calValid">—</span></div>
+                <div class="row"><span class="k">bias</span><span class="v" id="calBias">—</span></div>
+                <div class="row"><span class="k">scale</span><span class="v" id="calScale">—</span></div>
+              </div>
+              <p class="aux" id="calNote" title="校准中已锁定：复位（0x15）、保存频率（0x1D）、persist 保存、滤波设置（其 0x18 会取消校准）。0x1C 超时不重发，改用 0x24 查询恢复状态。">每面 60 s 超时 · 校准中锁定复位与保存</p>
+            </details>
+            <span class="fill"></span>
+            <button id="btnCalCancel" disabled title="0x25：立即 ACK + 0x0A，稍后最终 ACK 3/0x0608">取消</button>
+            <button class="primary" id="btnCalStart" disabled title="17 → 1C；结束后自动 18。完成时固件写 Flash">开始校准</button>
+          </div>
+        </section>
+      </section>
+
+      <!-- ========== 诊断 ========== -->
+      <section class="view view-diag" data-view="diag" hidden>
+        <header class="page-h"><h1>链路诊断</h1><span class="chip" id="diagState">未连接</span></header>
+        <div class="two-col even">
+          <section class="card">
+            <div class="card-h"><h2>链路</h2></div>
+            <div class="kpis" id="diagKey"></div>
+            <details class="disclosure"><summary>全部统计<svg class="ic xs"><use href="#i-chevron"/></svg></summary><div class="diag" id="diag"></div></details>
+          </section>
+          <section class="card">
+            <div class="card-h"><h2>工具</h2></div>
+            <div class="rows">
+              <div class="row"><span class="k">设备</span><span class="v btns"><button id="btnRequery" disabled title="重新查询 23/1F/26/14">重新查询</button><button id="btnReset" disabled title="0x15：ACK 后 MCU 复位，按已保存配置启动；不自动重发">复位</button></span></div>
+              <div class="row"><span class="k">原始帧</span><span class="v btns"><button id="btnRaw" disabled>记录原始帧</button><button id="btnRawSave" disabled>导出</button></span></div>
+              <div class="row"><span class="k">数据</span><span class="v btns"><button id="btnRec" disabled>开始记录 CSV</button><button id="btnDiag">导出诊断</button></span></div>
+              <div class="row"><span class="k">静止测试</span><span class="v btns"><select id="selDrift" title="测试时长"><option value="10">10 s</option><option value="30" selected>30 s</option></select><button id="btnDrift" disabled>开始</button></span></div>
+            </div>
+            <div class="msg" id="actMsg"></div>
+            <div class="msg" id="recMsg"></div>
+            <div class="drift" id="driftOut"></div>
+            <details class="disclosure"><summary>事件<svg class="ic xs"><use href="#i-chevron"/></svg></summary><ol class="events" id="events"></ol></details>
+            <details class="disclosure" title="已隐藏入口，不发送、不轮询"><summary>固件未实现<svg class="ic xs"><use href="#i-chevron"/></svg></summary><ul class="unsup" id="unsupported"></ul></details>
+          </section>
+        </div>
+      </section>
+
+      <!-- ========== 设置 ========== -->
+      <section class="view view-settings" data-view="settings" hidden>
+        <header class="page-h"><h1>设置</h1><span class="chip" id="setState">未连接</span></header>
+        <div class="two-col even">
+          <section class="card filter-card">
+            <div class="card-h"><h2>VQF 滤波</h2></div>
+            <div class="seg filter-seg" id="filterBtns"></div>
+            <label class="switch-row" title="persist=1：同时写入 Flash"><span>断电保存</span><input type="checkbox" class="switch" id="filterPersist"></label>
+            <div class="rows">
+              <div class="row"><span class="k">当前 / 已保存</span><span class="v" id="fPair">—</span></div>
+            </div>
+            <details class="disclosure parameter-details"><summary>参数详情<svg class="ic xs"><use href="#i-chevron"/></svg></summary>
+              <div class="kv-rows">
+                <div class="row"><span class="k">输出静止 / 运动 τ</span><span class="v" id="fTau">—</span></div>
+                <div class="row"><span class="k">估计器</span><span class="v" id="fEst">—</span></div>
+                <div class="row"><span class="k">内核参数</span><span class="v" id="fCore">—</span></div>
+              </div>
+            </details>
+            <span class="sr-only" id="fNote"></span>
+            <div class="msg" id="filterMsg"></div>
+          </section>
+          <section class="card">
+            <div class="card-h"><h2>设备</h2></div>
+            <div class="rows">
+              <div class="row"><span class="k">固件</span><span class="v" id="fw">—</span></div>
+              <div class="row"><span class="k">串口</span><span class="v" id="portInfo">—</span></div>
+              <div class="row"><span class="k">链路</span><span class="v" id="baud" title="Web Serial · 无流控 · 数据不出浏览器">UART 2,000,000 8N1</span></div>
+              <div class="row"><span class="k">温度</span><span class="v" id="dTemp">—</span></div>
+            </div>
+            <details class="disclosure"><summary>更多<svg class="ic xs"><use href="#i-chevron"/></svg></summary>
+              <div class="kv-rows">
+                <div class="row"><span class="k" title="融合 / 输出 / skip">速率</span><span class="v" id="dRates">—</span></div>
+                <div class="row"><span class="k">stream_mode</span><span class="v" id="dStream">—</span></div>
+                <div class="row"><span class="k">CAN</span><span class="v" id="dCan" title="can_ok=1 仅表示控制器初始化，不代表总线正常">—</span></div>
+                <div class="row"><span class="k">能力</span><span class="v" id="dCaps">—</span></div>
+                <div class="row"><span class="k">陀螺量程</span><span class="v" id="dRange">—</span></div>
+                <div class="row"><span class="k">融合</span><span class="v" id="dFusion">—</span></div>
+              </div>
+              <div class="sub-actions"><a class="btn-like" href="https://ahrs.233688.xyz/" target="_blank" rel="noopener">AHRS Hub</a><a class="btn-like" href="https://gyroa.233688.xyz/" target="_blank" rel="noopener">AT32 上位机</a></div>
+            </details>
+            <details class="disclosure" id="otaCard"><summary>UART 固件升级</summary>
+              <p class="muted" id="otaCap">连接后查询能力</p>
+              <label class="field">应用镜像<input type="file" id="otaFile" accept=".bin" title="仅支持 CH32_AHRS_app.bin；保留已保存配置和校准"></label>
+              <span class="sr-only">请选择 CH32_AHRS_app.bin。升级后重启，保留已保存配置和校准。</span>
+              <progress id="otaProgress" value="0" max="1" style="width:100%" aria-label="升级进度"></progress>
+              <div class="sub-actions"><button id="btnOta" disabled>升级应用</button><button id="btnOtaCancel" disabled>取消上传</button></div>
+              <div class="msg" id="otaMsg" aria-live="polite"></div>
+            </details>
+          </section>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

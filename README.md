@@ -23,6 +23,8 @@
 | `Core/`、`Peripheral/`、`Startup/`、`Ld/`、`Debug/` | 芯片库、启动代码与链接配置 |
 | `Utils/`、`tools/` | 公共工具与构建脚本 |
 
+上位机位于 [`upper/`](upper/)，包含 Web Serial 页面、3D 板卡模型、本地服务和构建/测试脚本。仓库只保留固件最小编译所需文件及上位机源码与必要资源；工具链、`node_modules`、编译产物、ZIP、截图和运行日志不进入 Git。
+
 ## 编译
 
 需要Python 3及WCH RISC-V Embedded GCC 12工具链。脚本构建APP和独立BL，不依赖IDE生成的makefile。
@@ -37,6 +39,19 @@ python firmware/tools/build_ahrs.py --toolchain 'D:\MounRiverStudio\MounRiver_St
 - `boot_stub.bin`：BL，烧录地址`0x08000000`。
 
 `20261003h` 应用镜像大小为 31,088B，引导程序为 996B。预编译固件可从 [Release](https://github.com/Mathonix/CH32V203G6U-Fixed-VQF-IMU/releases/tag/v20261003h) 下载。
+
+## 上位机
+
+需要 Node.js 24 和支持 Web Serial 的 Chrome/Edge。在仓库根目录执行：
+
+```powershell
+cd upper
+npm ci
+npm run build
+npm run dev
+```
+
+打开 `http://127.0.0.1:8765/` 连接串口；`http://127.0.0.1:8765/?mock=1` 为模拟设备演示。上位机支持姿态/IMU 曲线、四档滤波、六面校准、输出配置和 UART OTA。OTA 使用上述编译生成的 `firmware/obj/ahrs_real/CH32_AHRS_app.bin`。完整运行和测试步骤见 [`upper/README.md`](upper/README.md)。
 
 ## 接口与许可
 

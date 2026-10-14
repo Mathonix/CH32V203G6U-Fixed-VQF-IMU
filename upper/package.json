@@ -1,0 +1,21 @@
+{
+  "name": "gyroc-233688",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-pcb-view.mjs",
+    "test": "node test/protocol.test.mjs && node test/mock-device.mjs && node test/profiles-ota.test.mjs",
+    "test:browser": "node test/browser.check.mjs && node test/profiles.browser.mjs",
+    "test:mobile": "node test/mobile-layout.mjs",
+    "test:layout": "node test/ui-pages.mjs",
+    "deploy": "wrangler deploy",
+    "dev": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "occt-import-js": "^0.0.23",
+    "puppeteer-core": "^25.12.0",
+    "three": "^0.186.1",
+    "wrangler": "^4.131.2"
+  }
+}

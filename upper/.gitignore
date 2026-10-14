@@ -1,0 +1,34 @@
+# Dependencies, build state and local tooling output.
+/node_modules/
+/.wrangler/
+/dist/
+/coverage/
+/.cache/
+/playwright-report/
+/test-results/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime downloads/screenshots and local delivery records.
+/test/downloads/
+/test/shots/
+/test/ui-regression-*/
+/test/ui-20261004/
+/test/mobile-20261004/
+/test/*.tmp.mjs
+/test/hardware-control.json
+/CHANGE_MANIFEST.json
+/TEST_REPORT.md
+/UI_PREVIEW_20261004.md
+/MOBILE_PREVIEW_20261004.md
+/ch32-handoff-20261003h.md
+
+# Firmware is built from ../firmware; keep local credentials and artifacts ignored.
+/firmware/
+/.env
+/.env.*
+/.dev.vars
+/.dev.vars.*
+*.log
+*.zip

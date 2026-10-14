@@ -1,0 +1,102 @@
+{
+  "source": "ch32-board.step",
+  "sourceSha256": "9d9fc508e8a164326d4bd24d9d819ee9884162d03e28ef59cdf108c9bd993954",
+  "sourceBytes": 3224663,
+  "converter": "occt-import-js 0.0.23",
+  "tessellation": {
+    "linearUnit": "millimeter",
+    "linearDeflectionType": "absolute_value",
+    "linearDeflection": 0.01,
+    "angularDeflection": 0.2
+  },
+  "componentMeshes": 151,
+  "triangles": 14116,
+  "vertices": 16114,
+  "materialCount": 12,
+  "boardDimensionsMm": [
+    12.446,
+    12.192,
+    1.6
+  ],
+  "bodyAxes": "STEP X / Y / Z preserved; PCB_FR4 center is rotation origin; cadToBody applied in pcb-view.js",
+  "imu": {
+    "part": "U5 LSM6DSVTR",
+    "centerMm": [
+      2.548001,
+      2.9169359999999998,
+      2.0949999999999998
+    ],
+    "pin1Mm": [
+      3.388100446302486,
+      2.216936,
+      2.55
+    ],
+    "pin1Corner": [
+      1,
+      -1
+    ],
+    "axesInCad": {
+      "X": [
+        -1,
+        0,
+        0
+      ],
+      "Y": [
+        0,
+        -1,
+        0
+      ],
+      "Z": [
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "centerMm": [
+    0,
+    0,
+    0.8
+  ],
+  "displayScale": 0.2089024586212438,
+  "bounds": {
+    "min": [
+      -1.2999999523162842,
+      -1.27346932888031,
+      -0.17965611815452576
+    ],
+    "max": [
+      1.2999999523162842,
+      1.27346932888031,
+      0.3708018660545349
+    ]
+  },
+  "componentNames": [
+    "PCB_FR4",
+    "Top_Soldermask",
+    "Bottom_Soldermask",
+    "C9_body",
+    "R5_body",
+    "R3_body",
+    "R2_body",
+    "R4_body",
+    "R1_body",
+    "C1_body",
+    "C6_body",
+    "C10_body",
+    "C2_body",
+    "C4_body",
+    "C5_body",
+    "C8_body",
+    "C3_body",
+    "C7_body",
+    "U2_lens",
+    "U3_lens",
+    "U1_CH32V203G6U6_body",
+    "U4_TLV75533PDRVR_body",
+    "U5_LSM6DSVTR_body",
+    "U6_SIT1051ATK_3_body"
+  ],
+  "glbBytes": 478264,
+  "glbSha256": "9fbb5f76a473416a13aa8cc7429d6186d5e0e2dc4656619089b70276fe0ec380"
+}
